@@ -48,7 +48,7 @@ export default function AgentsPage() {
   });
 
   return (
-    <div className="flex flex-1 flex-col sm:flex-row">
+    <div className="flex h-full flex-col sm:flex-row">
       {/* Mobile: Agents carousel (horizontal scroll) */}
       <div className="shrink-0 border-b border-border-subtle bg-bg-surface sm:hidden">
         <div className="flex items-center gap-2 overflow-x-auto px-4 py-3">

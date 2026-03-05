@@ -14,13 +14,6 @@ import (
 	"github.com/pinchtab/pinchtab/internal/bridge"
 )
 
-func envWithFallback(newKey, oldKey string) string {
-	if v := os.Getenv(newKey); v != "" {
-		return v
-	}
-	return os.Getenv(oldKey)
-}
-
 type DashboardConfig struct {
 	IdleTimeout       time.Duration
 	DisconnectTimeout time.Duration
@@ -115,7 +108,7 @@ func NewDashboard(cfg *DashboardConfig) *Dashboard {
 		sseConns:       make(map[chan AgentEvent]struct{}),
 		sysConns:       make(map[chan SystemEvent]struct{}),
 		cancel:         cancel,
-		childAuthToken: envWithFallback("PINCHTAB_TOKEN", "BRIDGE_TOKEN"),
+		childAuthToken: os.Getenv("BRIDGE_TOKEN"),
 	}
 	return d
 }
@@ -132,7 +125,7 @@ func (d *Dashboard) RegisterHandlers(mux *http.ServeMux) {
 
 	// Serve static assets under /dashboard/ with long cache (hashed filenames)
 	mux.Handle("GET /dashboard/assets/", http.StripPrefix("/dashboard", d.withLongCache(fileServer)))
-	mux.Handle("GET /dashboard/pinchtab-headed-192.png", http.StripPrefix("/dashboard", d.withLongCache(fileServer)))
+	mux.Handle("GET /dashboard/favicon.png", http.StripPrefix("/dashboard", d.withLongCache(fileServer)))
 
 	// SPA: serve dashboard.html for /dashboard
 	mux.Handle("GET /dashboard", d.withNoCache(http.HandlerFunc(d.handleDashboardUI)))

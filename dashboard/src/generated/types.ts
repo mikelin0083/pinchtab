@@ -64,7 +64,7 @@ export interface ActivityEvent {
   method: string;
   path: string;
   timestamp: string;
-  details?: { [key: string]: any };
+  details?: { [key: string]: any};
 }
 /**
  * ScreencastSettings configures live tab previews.
@@ -107,6 +107,10 @@ export interface ServerInfo {
   profiles: number /* int */;
   instances: number /* int */;
   agents: number /* int */;
+  strategy?: string;
+  allocationPolicy?: string;
+  tabEvictionPolicy?: string;
+  configPath?: string;
 }
 /**
  * CreateProfileRequest is the request body for creating a profile.

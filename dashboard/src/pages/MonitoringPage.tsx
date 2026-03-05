@@ -174,11 +174,11 @@ export default function MonitoringPage() {
 
   return (
     <ErrorBoundary>
-      <div className="flex flex-1 flex-col gap-4 overflow-auto p-4">
+      <div className="flex h-full flex-col gap-4 overflow-hidden p-4">
         {/* Chart - always show, even with no instances (displays server metrics) */}
         <ErrorBoundary
           fallback={
-            <div className="flex h-[200px] items-center justify-center rounded-lg border border-destructive/50 bg-bg-surface text-sm text-destructive">
+            <div className="flex h-50 items-center justify-center rounded-lg border border-destructive/50 bg-bg-surface text-sm text-destructive">
               Chart crashed - check console
             </div>
           }

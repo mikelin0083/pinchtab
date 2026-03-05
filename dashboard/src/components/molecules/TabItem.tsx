@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card } from "../atoms";
 import type { InstanceTab } from "../../generated/types";
 
@@ -7,23 +8,59 @@ interface Props {
 }
 
 export default function TabItem({ tab, compact }: Props) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(tab.id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shortId = tab.id.split("_").pop()?.substring(0, 8) || tab.id;
+
+  const idBadge = (
+    <button
+      onClick={handleCopy}
+      title={`Click to copy full ID: ${tab.id}`}
+      className="group flex shrink-0 items-center gap-1.5 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] font-mono text-text-muted transition-colors hover:bg-border-subtle hover:text-text-primary focus:outline-none"
+    >
+      <span>{shortId}</span>
+      <span className="text-[8px] opacity-0 transition-opacity group-hover:opacity-100">
+        {copied ? "✅" : "📋"}
+      </span>
+    </button>
+  );
+
   if (compact) {
     return (
       <div className="border-b border-border-subtle py-2">
-        <div className="truncate text-sm text-text-primary">
-          {tab.title || "Untitled"}
+        <div className="flex items-center gap-2 overflow-hidden">
+          {idBadge}
+          <div className="text-text-muted/30">|</div>
+          <div className="truncate text-sm font-medium text-text-primary">
+            {tab.title || "Untitled"}
+          </div>
         </div>
-        <div className="truncate text-xs text-text-muted">{tab.url}</div>
+        <div className="mt-0.5 truncate text-[11px] text-text-muted opacity-70">
+          {tab.url}
+        </div>
       </div>
     );
   }
 
   return (
-    <Card className="p-2">
-      <div className="truncate text-sm text-text-primary">
-        {tab.title || "Untitled"}
+    <Card className="p-3">
+      <div className="flex items-center gap-2 overflow-hidden">
+        {idBadge}
+        <div className="text-text-muted/30">|</div>
+        <div className="truncate text-sm font-medium text-text-primary">
+          {tab.title || "Untitled"}
+        </div>
       </div>
-      <div className="truncate text-xs text-text-muted">{tab.url}</div>
+      <div className="mt-1 truncate text-xs text-text-muted opacity-80">
+        {tab.url}
+      </div>
     </Card>
   );
 }
