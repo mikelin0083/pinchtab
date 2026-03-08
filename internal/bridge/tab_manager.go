@@ -139,7 +139,7 @@ func (tm *TabManager) TabContext(tabID string) (context.Context, string, error) 
 						tm.onTabSetup(ctx)
 					}
 					tm.RegisterTabWithCancel(tabID, raw, ctx, cancel)
-					
+
 					tm.mu.RLock()
 					entry = tm.tabs[tabID]
 					tm.mu.RUnlock()
