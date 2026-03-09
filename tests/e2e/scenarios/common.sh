@@ -215,9 +215,21 @@ pinchtab() {
 }
 
 # Aliases for cleaner test files
+# Usage: pt_get /path
+#        pt_post /path '{"json":"data"}'
+#        pt_post /path -d '{"json":"data"}'  (also works)
 pt() { pinchtab "$@"; }
 pt_get() { pinchtab GET "$1"; echo "$RESULT"; }
-pt_post() { pinchtab POST "$1" -d "$2"; echo "$RESULT"; }
+pt_post() {
+  local path="$1"
+  shift
+  # Handle both: pt_post /path '{"data"}' and pt_post /path -d '{"data"}'
+  if [ "$1" = "-d" ]; then
+    shift
+  fi
+  pinchtab POST "$path" -d "$1"
+  echo "$RESULT"
+}
 
 # ================================================================
 # URL accessibility checks
