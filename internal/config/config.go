@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -72,6 +74,32 @@ type RuntimeConfig struct {
 	Scheduler SchedulerConfig
 }
 
+// EnabledSensitiveEndpoints returns the names of sensitive endpoint families
+// that are currently enabled in the runtime configuration.
+func (cfg *RuntimeConfig) EnabledSensitiveEndpoints() []string {
+	if cfg == nil {
+		return nil
+	}
+
+	enabled := make([]string, 0, 5)
+	if cfg.AllowEvaluate {
+		enabled = append(enabled, "evaluate")
+	}
+	if cfg.AllowMacro {
+		enabled = append(enabled, "macro")
+	}
+	if cfg.AllowScreencast {
+		enabled = append(enabled, "screencast")
+	}
+	if cfg.AllowDownload {
+		enabled = append(enabled, "download")
+	}
+	if cfg.AllowUpload {
+		enabled = append(enabled, "upload")
+	}
+	return enabled
+}
+
 // SchedulerConfig holds task scheduler settings.
 type SchedulerConfig struct {
 	Enabled           bool   `json:"enabled,omitempty"`
@@ -95,7 +123,6 @@ type FileConfig struct {
 	Security         SecurityConfig         `json:"security,omitempty"`
 	Profiles         ProfilesConfig         `json:"profiles,omitempty"`
 	MultiInstance    MultiInstanceConfig    `json:"multiInstance,omitempty"`
-	Attach           AttachConfig           `json:"attach,omitempty"`
 	Timeouts         TimeoutsConfig         `json:"timeouts,omitempty"`
 	Scheduler        SchedulerFileConfig    `json:"scheduler,omitempty"`
 }
@@ -140,12 +167,13 @@ type ProfilesConfig struct {
 
 // SecurityConfig holds security/permission settings.
 type SecurityConfig struct {
-	AllowEvaluate   *bool      `json:"allowEvaluate,omitempty"`
-	AllowMacro      *bool      `json:"allowMacro,omitempty"`
-	AllowScreencast *bool      `json:"allowScreencast,omitempty"`
-	AllowDownload   *bool      `json:"allowDownload,omitempty"`
-	AllowUpload     *bool      `json:"allowUpload,omitempty"`
-	IDPI            IDPIConfig `json:"idpi,omitempty"`
+	AllowEvaluate   *bool        `json:"allowEvaluate,omitempty"`
+	AllowMacro      *bool        `json:"allowMacro,omitempty"`
+	AllowScreencast *bool        `json:"allowScreencast,omitempty"`
+	AllowDownload   *bool        `json:"allowDownload,omitempty"`
+	AllowUpload     *bool        `json:"allowUpload,omitempty"`
+	Attach          AttachConfig `json:"attach,omitempty"`
+	IDPI            IDPIConfig   `json:"idpi,omitempty"`
 }
 
 // IDPIConfig holds the configuration for the Indirect Prompt Injection (IDPI)
@@ -157,8 +185,8 @@ type IDPIConfig struct {
 
 	// AllowedDomains is a whitelist of permitted navigation targets.
 	// An empty list means all domains are allowed (no restriction).
-	// Patterns support exact matches ("example.com") and single-level wildcard
-	// prefixes ("*.example.com"). The special value "*" allows everything.
+	// Patterns support exact matches ("pinchtab.com") and single-level wildcard
+	// prefixes ("*.pinchtab.com"). The special value "*" allows everything.
 	AllowedDomains []string `json:"allowedDomains,omitempty"`
 
 	// StrictMode controls the response when a threat is detected.
@@ -180,6 +208,8 @@ type IDPIConfig struct {
 	// phrases. Matched case-insensitively, same as the built-in patterns.
 	CustomPatterns []string `json:"customPatterns,omitempty"`
 }
+
+var defaultLocalAllowedDomains = []string{"127.0.0.1", "localhost", "::1"}
 
 // MultiInstanceConfig holds multi-instance orchestration settings.
 type MultiInstanceConfig struct {
@@ -430,6 +460,16 @@ func finalizeProfileConfig(cfg *RuntimeConfig) {
 	}
 }
 
+// GenerateAuthToken returns a cryptographically random bearer token suitable
+// for server authentication.
+func GenerateAuthToken() (string, error) {
+	buf := make([]byte, 24)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate auth token: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
+}
+
 // Load returns the RuntimeConfig with precedence: env vars > config file > defaults.
 func Load() *RuntimeConfig {
 	cfg := &RuntimeConfig{
@@ -483,6 +523,15 @@ func Load() *RuntimeConfig {
 		AttachEnabled:      false,
 		AttachAllowHosts:   []string{"127.0.0.1", "localhost", "::1"},
 		AttachAllowSchemes: []string{"ws", "wss"},
+
+		// IDPI defaults
+		IDPI: IDPIConfig{
+			Enabled:        true,
+			AllowedDomains: append([]string(nil), defaultLocalAllowedDomains...),
+			StrictMode:     true,
+			ScanContent:    true,
+			WrapContent:    true,
+		},
 	}
 	finalizeProfileConfig(cfg)
 
@@ -642,14 +691,14 @@ func applyFileConfig(cfg *RuntimeConfig, fc *FileConfig) {
 	}
 
 	// Attach
-	if fc.Attach.Enabled != nil {
-		cfg.AttachEnabled = *fc.Attach.Enabled
+	if fc.Security.Attach.Enabled != nil {
+		cfg.AttachEnabled = *fc.Security.Attach.Enabled
 	}
-	if len(fc.Attach.AllowHosts) > 0 {
-		cfg.AttachAllowHosts = append([]string(nil), fc.Attach.AllowHosts...)
+	if len(fc.Security.Attach.AllowHosts) > 0 {
+		cfg.AttachAllowHosts = append([]string(nil), fc.Security.Attach.AllowHosts...)
 	}
-	if len(fc.Attach.AllowSchemes) > 0 {
-		cfg.AttachAllowSchemes = append([]string(nil), fc.Attach.AllowSchemes...)
+	if len(fc.Security.Attach.AllowSchemes) > 0 {
+		cfg.AttachAllowSchemes = append([]string(nil), fc.Security.Attach.AllowSchemes...)
 	}
 
 	// Timeouts
@@ -709,6 +758,11 @@ func DefaultFileConfig() FileConfig {
 	start := 9868
 	end := 9968
 	maxTabs := 20
+	allowEvaluate := false
+	allowMacro := false
+	allowScreencast := false
+	allowDownload := false
+	allowUpload := false
 	return FileConfig{
 		Server: ServerConfig{
 			Port:     "9867",
@@ -724,6 +778,24 @@ func DefaultFileConfig() FileConfig {
 			StealthLevel:      "light",
 			TabEvictionPolicy: "reject",
 		},
+		Security: SecurityConfig{
+			AllowEvaluate:   &allowEvaluate,
+			AllowMacro:      &allowMacro,
+			AllowScreencast: &allowScreencast,
+			AllowDownload:   &allowDownload,
+			AllowUpload:     &allowUpload,
+			Attach: AttachConfig{
+				AllowHosts:   []string{"127.0.0.1", "localhost", "::1"},
+				AllowSchemes: []string{"ws", "wss"},
+			},
+			IDPI: IDPIConfig{
+				Enabled:        true,
+				AllowedDomains: append([]string(nil), defaultLocalAllowedDomains...),
+				StrictMode:     true,
+				ScanContent:    true,
+				WrapContent:    true,
+			},
+		},
 		Profiles: ProfilesConfig{
 			BaseDir:        filepath.Join(userConfigDir(), "profiles"),
 			DefaultProfile: "default",
@@ -733,10 +805,6 @@ func DefaultFileConfig() FileConfig {
 			AllocationPolicy:  "fcfs",
 			InstancePortStart: &start,
 			InstancePortEnd:   &end,
-		},
-		Attach: AttachConfig{
-			AllowHosts:   []string{"127.0.0.1", "localhost", "::1"},
-			AllowSchemes: []string{"ws", "wss"},
 		},
 		Timeouts: TimeoutsConfig{
 			ActionSec:   30,
@@ -809,6 +877,11 @@ func FileConfigFromRuntime(cfg *RuntimeConfig) FileConfig {
 			AllowScreencast: &allowScreencast,
 			AllowDownload:   &allowDownload,
 			AllowUpload:     &allowUpload,
+			Attach: AttachConfig{
+				Enabled:      &attachEnabled,
+				AllowHosts:   append([]string(nil), cfg.AttachAllowHosts...),
+				AllowSchemes: append([]string(nil), cfg.AttachAllowSchemes...),
+			},
 		},
 		Profiles: ProfilesConfig{
 			BaseDir:        cfg.ProfilesBaseDir,
@@ -819,11 +892,6 @@ func FileConfigFromRuntime(cfg *RuntimeConfig) FileConfig {
 			AllocationPolicy:  cfg.AllocationPolicy,
 			InstancePortStart: &start,
 			InstancePortEnd:   &end,
-		},
-		Attach: AttachConfig{
-			Enabled:      &attachEnabled,
-			AllowHosts:   append([]string(nil), cfg.AttachAllowHosts...),
-			AllowSchemes: append([]string(nil), cfg.AttachAllowSchemes...),
 		},
 		Timeouts: TimeoutsConfig{
 			ActionSec:   int(cfg.ActionTimeout / time.Second),
@@ -885,9 +953,9 @@ func handleConfigGet() {
 		fmt.Println("Examples:")
 		fmt.Println("  pinchtab config get server.port")
 		fmt.Println("  pinchtab config get instanceDefaults.mode")
-		fmt.Println("  pinchtab config get attach.allowHosts")
+		fmt.Println("  pinchtab config get security.attach.allowHosts")
 		fmt.Println()
-		fmt.Println("Sections: server, browser, instanceDefaults, security, profiles, multiInstance, attach, timeouts")
+		fmt.Println("Sections: server, browser, instanceDefaults, security, profiles, multiInstance, timeouts")
 		os.Exit(1)
 	}
 
@@ -927,6 +995,12 @@ func handleConfigInit() {
 	}
 
 	fc := DefaultFileConfig()
+	token, err := GenerateAuthToken()
+	if err != nil {
+		fmt.Printf("Error generating auth token: %v\n", err)
+		os.Exit(1)
+	}
+	fc.Server.Token = token
 	data, _ := json.MarshalIndent(fc, "", "  ")
 	if err := os.WriteFile(configPath, data, 0644); err != nil {
 		fmt.Printf("Error writing config: %v\n", err)
@@ -1007,8 +1081,9 @@ func handleConfigSet() {
 		fmt.Println("  pinchtab config set server.port 8080")
 		fmt.Println("  pinchtab config set instanceDefaults.mode headed")
 		fmt.Println("  pinchtab config set multiInstance.strategy explicit")
+		fmt.Println("  pinchtab config set security.attach.enabled true")
 		fmt.Println()
-		fmt.Println("Sections: server, browser, instanceDefaults, security, profiles, multiInstance, attach, timeouts")
+		fmt.Println("Sections: server, browser, instanceDefaults, security, profiles, multiInstance, timeouts")
 		os.Exit(1)
 	}
 

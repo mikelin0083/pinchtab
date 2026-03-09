@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getStoredAuthToken } from "../../services/auth";
 
 interface Props {
   instancePort: string;
@@ -38,7 +39,17 @@ export default function ScreencastTile({
     // Use window.location.hostname so this works when the dashboard is served
     // from a remote host (e.g. a headless Ubuntu server) instead of localhost.
     const host = window.location.hostname;
-    const wsUrl = `ws://${host}:${instancePort}/screencast?tabId=${encodeURIComponent(tabId)}&quality=${quality}&maxWidth=${maxWidth}&fps=${fps}`;
+    const token = getStoredAuthToken();
+    const params = new URLSearchParams({
+      tabId,
+      quality: String(quality),
+      maxWidth: String(maxWidth),
+      fps: String(fps),
+    });
+    if (token) {
+      params.set("token", token);
+    }
+    const wsUrl = `ws://${host}:${instancePort}/screencast?${params.toString()}`;
 
     const socket = new WebSocket(wsUrl);
     socket.binaryType = "arraybuffer";

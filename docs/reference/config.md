@@ -4,6 +4,8 @@
 
 Use this page as the command and schema reference. Broader deployment patterns can move to a separate guide later.
 
+For security posture, token usage, sensitive endpoint policy, and IDPI guidance, see [Security](../guides/security.md).
+
 ## Commands
 
 ### `pinchtab config init`
@@ -54,7 +56,7 @@ Reads a single dotted-path value from the config file.
 ```bash
 pinchtab config get server.port
 pinchtab config get instanceDefaults.mode
-pinchtab config get attach.allowHosts
+pinchtab config get security.attach.allowHosts
 ```
 
 ### `pinchtab config set`
@@ -147,7 +149,20 @@ Current nested config shape:
     "allowMacro": false,
     "allowScreencast": false,
     "allowDownload": false,
-    "allowUpload": false
+    "allowUpload": false,
+    "attach": {
+      "enabled": false,
+      "allowHosts": ["127.0.0.1", "localhost", "::1"],
+      "allowSchemes": ["ws", "wss"]
+    },
+    "idpi": {
+      "enabled": true,
+      "allowedDomains": ["127.0.0.1", "localhost", "::1"],
+      "strictMode": true,
+      "scanContent": true,
+      "wrapContent": true,
+      "customPatterns": []
+    }
   },
   "profiles": {
     "baseDir": "/path/to/profiles",
@@ -158,11 +173,6 @@ Current nested config shape:
     "allocationPolicy": "fcfs",
     "instancePortStart": 9868,
     "instancePortEnd": 9968
-  },
-  "attach": {
-    "enabled": false,
-    "allowHosts": ["127.0.0.1", "localhost", "::1"],
-    "allowSchemes": ["ws", "wss"]
   },
   "timeouts": {
     "actionSec": 30,
@@ -180,10 +190,9 @@ Current nested config shape:
 | `server` | HTTP server settings |
 | `browser` | Chrome executable and launch wiring |
 | `instanceDefaults` | Default behavior for managed instances |
-| `security` | Sensitive feature gates |
+| `security` | Sensitive feature gates, attach policy, and IDPI |
 | `profiles` | Profile storage defaults |
 | `multiInstance` | Strategy, allocation, and instance port range |
-| `attach` | Policy for attaching to external Chrome targets |
 | `timeouts` | Runtime timeouts |
 
 ## Common Examples
@@ -233,10 +242,29 @@ PINCHTAB_BIND=0.0.0.0 PINCHTAB_TOKEN=secret pinchtab
 
 ```json
 {
-  "attach": {
-    "enabled": true,
-    "allowHosts": ["127.0.0.1", "localhost", "chrome.internal"],
-    "allowSchemes": ["ws", "wss"]
+  "security": {
+    "attach": {
+      "enabled": true,
+      "allowHosts": ["127.0.0.1", "localhost", "chrome.internal"],
+      "allowSchemes": ["ws", "wss"]
+    }
+  }
+}
+```
+
+### IDPI Policy
+
+```json
+{
+  "security": {
+    "idpi": {
+      "enabled": true,
+      "allowedDomains": ["example.com", "*.example.com"],
+      "strictMode": true,
+      "scanContent": true,
+      "wrapContent": true,
+      "customPatterns": []
+    }
   }
 }
 ```
@@ -272,7 +300,7 @@ Use `pinchtab config init` to create a nested config file.
 - `instanceDefaults.maxParallelTabs >= 0`
 - valid `multiInstance.strategy`
 - valid `multiInstance.allocationPolicy`
-- valid `attach.allowSchemes`
+- valid `security.attach.allowSchemes`
 - `multiInstance.instancePortStart <= multiInstance.instancePortEnd`
 - non-negative timeout values
 
@@ -285,7 +313,7 @@ Valid enum values:
 | `instanceDefaults.tabEvictionPolicy` | `reject`, `close_oldest`, `close_lru` |
 | `multiInstance.strategy` | `simple`, `explicit`, `simple-autorestart` |
 | `multiInstance.allocationPolicy` | `fcfs`, `round_robin`, `random` |
-| `attach.allowSchemes` | `ws`, `wss` |
+| `security.attach.allowSchemes` | `ws`, `wss` |
 
 ## Notes
 

@@ -136,15 +136,51 @@ func TestSetConfigValue_AttachFields(t *testing.T) {
 		check   func(*FileConfig) bool
 		wantErr bool
 	}{
-		{"attach.enabled", "true", func(fc *FileConfig) bool { return fc.Attach.Enabled != nil && *fc.Attach.Enabled }, false},
-		{"attach.allowHosts", "localhost, chrome.internal", func(fc *FileConfig) bool {
-			return len(fc.Attach.AllowHosts) == 2 && fc.Attach.AllowHosts[1] == "chrome.internal"
+		{"security.attach.enabled", "true", func(fc *FileConfig) bool { return fc.Security.Attach.Enabled != nil && *fc.Security.Attach.Enabled }, false},
+		{"security.attach.allowHosts", "localhost, chrome.internal", func(fc *FileConfig) bool {
+			return len(fc.Security.Attach.AllowHosts) == 2 && fc.Security.Attach.AllowHosts[1] == "chrome.internal"
 		}, false},
-		{"attach.allowSchemes", "ws,wss", func(fc *FileConfig) bool {
-			return len(fc.Attach.AllowSchemes) == 2 && fc.Attach.AllowSchemes[0] == "ws"
+		{"security.attach.allowSchemes", "ws,wss", func(fc *FileConfig) bool {
+			return len(fc.Security.Attach.AllowSchemes) == 2 && fc.Security.Attach.AllowSchemes[0] == "ws"
 		}, false},
-		{"attach.enabled", "maybe", nil, true},
-		{"attach.unknown", "value", nil, true},
+		{"security.attach.enabled", "maybe", nil, true},
+		{"security.attach.unknown", "value", nil, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path+"="+tt.value, func(t *testing.T) {
+			fc := &FileConfig{}
+			err := SetConfigValue(fc, tt.path, tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("SetConfigValue() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && !tt.check(fc) {
+				t.Errorf("SetConfigValue() did not set value correctly")
+			}
+		})
+	}
+}
+
+func TestSetConfigValue_IDPIFields(t *testing.T) {
+	tests := []struct {
+		path    string
+		value   string
+		check   func(*FileConfig) bool
+		wantErr bool
+	}{
+		{"security.idpi.enabled", "true", func(fc *FileConfig) bool { return fc.Security.IDPI.Enabled }, false},
+		{"security.idpi.allowedDomains", "localhost, example.com", func(fc *FileConfig) bool {
+			return len(fc.Security.IDPI.AllowedDomains) == 2 && fc.Security.IDPI.AllowedDomains[1] == "example.com"
+		}, false},
+		{"security.idpi.strictMode", "false", func(fc *FileConfig) bool { return !fc.Security.IDPI.StrictMode }, false},
+		{"security.idpi.scanContent", "true", func(fc *FileConfig) bool { return fc.Security.IDPI.ScanContent }, false},
+		{"security.idpi.wrapContent", "true", func(fc *FileConfig) bool { return fc.Security.IDPI.WrapContent }, false},
+		{"security.idpi.customPatterns", "ignore previous instructions, exfiltrate data", func(fc *FileConfig) bool {
+			return len(fc.Security.IDPI.CustomPatterns) == 2 && fc.Security.IDPI.CustomPatterns[0] == "ignore previous instructions"
+		}, false},
+		{"security.idpi.enabled", "maybe", nil, true},
+		{"security.idpi.unknown", "value", nil, true},
 	}
 
 	for _, tt := range tests {
@@ -386,7 +422,13 @@ func TestGetConfigValue_RoundTrip(t *testing.T) {
 		{"multiInstance.allocationPolicy", "round_robin", "round_robin"},
 		{"multiInstance.instancePortStart", "9900", "9900"},
 		{"multiInstance.instancePortEnd", "9950", "9950"},
-		{"attach.enabled", "true", "true"},
+		{"security.attach.enabled", "true", "true"},
+		{"security.idpi.enabled", "true", "true"},
+		{"security.idpi.allowedDomains", "localhost,example.com", "localhost,example.com"},
+		{"security.idpi.strictMode", "false", "false"},
+		{"security.idpi.scanContent", "true", "true"},
+		{"security.idpi.wrapContent", "true", "true"},
+		{"security.idpi.customPatterns", "ignore previous instructions,exfiltrate", "ignore previous instructions,exfiltrate"},
 		{"timeouts.actionSec", "60", "60"},
 		{"timeouts.navigateSec", "90", "90"},
 		{"timeouts.shutdownSec", "15", "15"},
@@ -428,7 +470,7 @@ func TestGetConfigValue_NilPointerReturnsEmpty(t *testing.T) {
 		"security.allowUpload",
 		"multiInstance.instancePortStart",
 		"multiInstance.instancePortEnd",
-		"attach.enabled",
+		"security.attach.enabled",
 	}
 	for _, path := range ptrs {
 		t.Run(path, func(t *testing.T) {
@@ -445,20 +487,20 @@ func TestGetConfigValue_NilPointerReturnsEmpty(t *testing.T) {
 
 func TestGetConfigValue_AttachSlices(t *testing.T) {
 	fc := &FileConfig{}
-	fc.Attach.AllowHosts = []string{"127.0.0.1", "localhost"}
-	fc.Attach.AllowSchemes = []string{"ws", "wss"}
+	fc.Security.Attach.AllowHosts = []string{"127.0.0.1", "localhost"}
+	fc.Security.Attach.AllowSchemes = []string{"ws", "wss"}
 
-	hosts, err := GetConfigValue(fc, "attach.allowHosts")
+	hosts, err := GetConfigValue(fc, "security.attach.allowHosts")
 	if err != nil {
-		t.Fatalf("GetConfigValue(attach.allowHosts) error = %v", err)
+		t.Fatalf("GetConfigValue(security.attach.allowHosts) error = %v", err)
 	}
 	if hosts != "127.0.0.1,localhost" {
 		t.Errorf("allowHosts = %q, want %q", hosts, "127.0.0.1,localhost")
 	}
 
-	schemes, err := GetConfigValue(fc, "attach.allowSchemes")
+	schemes, err := GetConfigValue(fc, "security.attach.allowSchemes")
 	if err != nil {
-		t.Fatalf("GetConfigValue(attach.allowSchemes) error = %v", err)
+		t.Fatalf("GetConfigValue(security.attach.allowSchemes) error = %v", err)
 	}
 	if schemes != "ws,wss" {
 		t.Errorf("allowSchemes = %q, want %q", schemes, "ws,wss")
@@ -468,11 +510,12 @@ func TestGetConfigValue_AttachSlices(t *testing.T) {
 func TestGetConfigValue_UnknownPaths(t *testing.T) {
 	fc := &FileConfig{}
 	errorCases := []string{
-		"port",            // missing section
-		"",                // empty
-		"unknown.field",   // unknown section
-		"server.ghost",    // unknown field in known section
-		"attach.badfield", // unknown attach field
+		"port",                     // missing section
+		"",                         // empty
+		"unknown.field",            // unknown section
+		"server.ghost",             // unknown field in known section
+		"security.attach.badfield", // unknown attach field
+		"security.idpi.badfield",   // unknown idpi field
 	}
 	for _, path := range errorCases {
 		t.Run(path, func(t *testing.T) {

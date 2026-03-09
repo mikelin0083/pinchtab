@@ -5,6 +5,8 @@ import * as api from "../services/api";
 import type {
   BackendConfig,
   BackendConfigState,
+  BackendIDPIConfig,
+  BackendSecurityConfig,
   LocalDashboardSettings,
 } from "../types";
 
@@ -13,6 +15,7 @@ type SectionId =
   | "defaults"
   | "orchestration"
   | "security"
+  | "security-idpi"
   | "profiles"
   | "network"
   | "browser"
@@ -44,6 +47,11 @@ const sections: Array<{
     description: "Sensitive endpoint gates and access controls.",
   },
   {
+    id: "security-idpi",
+    label: "Security IDPI",
+    description: "Indirect prompt injection website and content defenses.",
+  },
+  {
     id: "profiles",
     label: "Profiles",
     description: "Shared profile storage and default profile behavior.",
@@ -70,6 +78,39 @@ const fieldClass =
 
 const selectClass =
   "rounded-sm border border-border-subtle bg-[rgb(var(--brand-surface-code-rgb)/0.72)] px-3 py-2 text-sm text-text-primary transition-all duration-150 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20";
+
+type SecurityEndpointKey = Exclude<keyof BackendSecurityConfig, "attach">;
+type IDPIToggleKey = Exclude<
+  keyof BackendIDPIConfig,
+  "allowedDomains" | "customPatterns"
+>;
+
+const securityEndpointRows = [
+  ["allowEvaluate", "Allow evaluate"],
+  ["allowMacro", "Allow macro"],
+  ["allowScreencast", "Allow screencast"],
+  ["allowDownload", "Allow download"],
+  ["allowUpload", "Allow upload"],
+] as const satisfies ReadonlyArray<readonly [SecurityEndpointKey, string]>;
+
+const idpiToggleRows = [
+  ["enabled", "Enable IDPI", "Turn on indirect prompt injection defenses."],
+  [
+    "strictMode",
+    "Strict mode",
+    "Block disallowed domains and suspicious content instead of only warning.",
+  ],
+  [
+    "scanContent",
+    "Scan content",
+    "Inspect extracted text and snapshots for prompt-injection patterns.",
+  ],
+  [
+    "wrapContent",
+    "Wrap content",
+    "Mark returned page text as untrusted content for downstream consumers.",
+  ],
+] as const satisfies ReadonlyArray<readonly [IDPIToggleKey, string, string]>;
 
 function csvToList(value: string): string[] {
   return value
@@ -138,6 +179,7 @@ export default function SettingsPage() {
   );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [generatingToken, setGeneratingToken] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -191,11 +233,25 @@ export default function SettingsPage() {
   const restartReasons =
     backendState?.restartReasons || serverInfo?.restartReasons || [];
   const sensitiveEndpointsEnabled = backendConfig
-    ? Object.values(backendConfig.security).some(Boolean)
+    ? [
+        backendConfig.security.allowEvaluate,
+        backendConfig.security.allowMacro,
+        backendConfig.security.allowScreencast,
+        backendConfig.security.allowDownload,
+        backendConfig.security.allowUpload,
+      ].some(Boolean)
     : false;
   const apiTokenMissing = backendConfig
     ? backendConfig.server.token.trim() === ""
     : false;
+  const idpiEnabled = backendConfig
+    ? backendConfig.security.idpi.enabled
+    : false;
+  const idpiAllowedDomains = backendConfig
+    ? backendConfig.security.idpi.allowedDomains
+    : [];
+  const idpiWildcard = idpiAllowedDomains.includes("*");
+  const idpiDomainsConfigured = idpiAllowedDomains.length > 0 && !idpiWildcard;
 
   const updateBackendSection = <K extends keyof BackendConfig>(
     section: K,
@@ -218,6 +274,26 @@ export default function SettingsPage() {
     setLocalSettings(settings);
     setError("");
     setNotice("");
+  };
+
+  const handleGenerateToken = async () => {
+    if (!backendConfig) {
+      return;
+    }
+    setGeneratingToken(true);
+    setError("");
+    setNotice("");
+    try {
+      const token = await api.generateBackendToken();
+      updateBackendSection("server", { token });
+      setNotice("Generated a new API token. Save changes to persist it.");
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : "Failed to generate API token";
+      setError(message);
+    } finally {
+      setGeneratingToken(false);
+    }
   };
 
   const handleSave = async () => {
@@ -720,7 +796,7 @@ export default function SettingsPage() {
               {activeSection === "security" && (
                 <SectionCard
                   title="Security"
-                  description="These feature gates affect what sensitive capabilities PinchTab exposes. They are applied to future launched instances and live middleware where supported."
+                  description="These controls define what risky capabilities PinchTab exposes."
                 >
                   <div
                     className={`rounded-sm px-4 py-3 text-sm leading-6 ${
@@ -733,13 +809,7 @@ export default function SettingsPage() {
                       ? "One or more sensitive endpoint families are enabled. Features like script execution, downloads, uploads, and live capture can expose high-risk capabilities. Only enable them in trusted environments. You are responsible for securing network access, authentication, and downstream use."
                       : "These endpoint families can expose high-risk capabilities when enabled. Only turn them on in trusted environments, and only when you accept responsibility for network access, authentication, and downstream use."}
                   </div>
-                  {[
-                    ["allowEvaluate", "Allow evaluate"],
-                    ["allowMacro", "Allow macro"],
-                    ["allowScreencast", "Allow screencast"],
-                    ["allowDownload", "Allow download"],
-                    ["allowUpload", "Allow upload"],
-                  ].map(([key, label]) => (
+                  {securityEndpointRows.map(([key, label]) => (
                     <SettingRow
                       key={key}
                       label={label}
@@ -748,15 +818,13 @@ export default function SettingsPage() {
                       <label className="flex items-center justify-end gap-3 text-sm text-text-secondary">
                         <input
                           type="checkbox"
-                          checked={
-                            backendConfig.security[
-                              key as keyof BackendConfig["security"]
-                            ]
-                          }
+                          checked={backendConfig.security[key]}
                           onChange={(e) =>
                             updateBackendSection("security", {
                               [key]: e.target.checked,
-                            } as Partial<BackendConfig["security"]>)
+                            } as Partial<
+                              Pick<BackendSecurityConfig, SecurityEndpointKey>
+                            >)
                           }
                           className="h-4 w-4"
                         />
@@ -764,6 +832,101 @@ export default function SettingsPage() {
                       </label>
                     </SettingRow>
                   ))}
+                </SectionCard>
+              )}
+
+              {activeSection === "security-idpi" && (
+                <SectionCard
+                  title="Security IDPI"
+                  description="Indirect prompt injection controls restrict which websites are allowed and add protections around extracted content before it reaches downstream automation."
+                >
+                  <div
+                    className={`mb-4 rounded-sm px-4 py-3 text-sm leading-6 ${
+                      !idpiEnabled || !idpiDomainsConfigured
+                        ? "border border-destructive/35 bg-destructive/10 text-destructive"
+                        : idpiWildcard
+                          ? "border border-warning/25 bg-warning/10 text-warning"
+                          : "border border-success/25 bg-success/10 text-success"
+                    }`}
+                  >
+                    {!idpiEnabled
+                      ? "IDPI is disabled. Browser content is not being filtered by website allowlist or content protections."
+                      : !idpiDomainsConfigured
+                        ? "The website whitelist is not set to a restricted domain list. This is the main IDPI defense and should be configured."
+                        : idpiWildcard
+                          ? "The website whitelist contains '*', which effectively disables domain restriction."
+                          : "IDPI is enforcing a specific website whitelist and content protections."}
+                  </div>
+                  {idpiToggleRows.map(([key, label, description]) => (
+                    <SettingRow
+                      key={key}
+                      label={label}
+                      description={description}
+                    >
+                      <label className="flex items-center justify-end gap-3 text-sm text-text-secondary">
+                        <input
+                          type="checkbox"
+                          checked={backendConfig.security.idpi[key]}
+                          onChange={(e) =>
+                            updateBackendSection("security", {
+                              idpi: {
+                                ...backendConfig.security.idpi,
+                                [key]: e.target.checked,
+                              },
+                            })
+                          }
+                          className="h-4 w-4"
+                        />
+                        Enable
+                      </label>
+                    </SettingRow>
+                  ))}
+                  <SettingRow
+                    label="Allowed websites"
+                    description="Comma-separated domain allowlist for web content. Use exact hosts or patterns like *.example.com."
+                  >
+                    <div className="space-y-2">
+                      <input
+                        value={listToCsv(
+                          backendConfig.security.idpi.allowedDomains,
+                        )}
+                        onChange={(e) =>
+                          updateBackendSection("security", {
+                            idpi: {
+                              ...backendConfig.security.idpi,
+                              allowedDomains: csvToList(e.target.value),
+                            },
+                          })
+                        }
+                        className={fieldClass}
+                        placeholder="127.0.0.1, localhost, ::1"
+                      />
+                      <div className="rounded-sm border border-warning/25 bg-warning/10 px-3 py-2 text-xs leading-5 text-warning">
+                        Keep this list narrow. Empty or wildcard entries weaken
+                        the main IDPI boundary.
+                      </div>
+                    </div>
+                  </SettingRow>
+                  <SettingRow
+                    label="Custom patterns"
+                    description="Optional comma-separated phrases to treat as suspicious prompt-injection content."
+                  >
+                    <input
+                      value={listToCsv(
+                        backendConfig.security.idpi.customPatterns,
+                      )}
+                      onChange={(e) =>
+                        updateBackendSection("security", {
+                          idpi: {
+                            ...backendConfig.security.idpi,
+                            customPatterns: csvToList(e.target.value),
+                          },
+                        })
+                      }
+                      className={fieldClass}
+                      placeholder="ignore previous instructions, exfiltrate data"
+                    />
+                  </SettingRow>
                 </SectionCard>
               )}
 
@@ -837,15 +1000,25 @@ export default function SettingsPage() {
                     description="Bearer token required by authenticated requests when set. Leaving this empty means reachable clients are unauthenticated."
                   >
                     <div className="space-y-2">
-                      <input
-                        value={backendConfig.server.token}
-                        onChange={(e) =>
-                          updateBackendSection("server", {
-                            token: e.target.value,
-                          })
-                        }
-                        className={fieldClass}
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          value={backendConfig.server.token}
+                          onChange={(e) =>
+                            updateBackendSection("server", {
+                              token: e.target.value,
+                            })
+                          }
+                          className={fieldClass}
+                        />
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={handleGenerateToken}
+                          disabled={generatingToken}
+                        >
+                          {generatingToken ? "Generating..." : "Generate"}
+                        </Button>
+                      </div>
                       {apiTokenMissing && (
                         <div className="rounded-sm border border-destructive/35 bg-destructive/10 px-3 py-2 text-xs leading-5 text-destructive">
                           No API token is set. Anyone who can reach this server
@@ -877,10 +1050,13 @@ export default function SettingsPage() {
                     <label className="flex items-center justify-end gap-3 text-sm text-text-secondary">
                       <input
                         type="checkbox"
-                        checked={backendConfig.attach.enabled}
+                        checked={backendConfig.security.attach.enabled}
                         onChange={(e) =>
-                          updateBackendSection("attach", {
-                            enabled: e.target.checked,
+                          updateBackendSection("security", {
+                            attach: {
+                              ...backendConfig.security.attach,
+                              enabled: e.target.checked,
+                            },
                           })
                         }
                         className="h-4 w-4"
@@ -894,10 +1070,15 @@ export default function SettingsPage() {
                   >
                     <div className="space-y-2">
                       <input
-                        value={listToCsv(backendConfig.attach.allowHosts)}
+                        value={listToCsv(
+                          backendConfig.security.attach.allowHosts,
+                        )}
                         onChange={(e) =>
-                          updateBackendSection("attach", {
-                            allowHosts: csvToList(e.target.value),
+                          updateBackendSection("security", {
+                            attach: {
+                              ...backendConfig.security.attach,
+                              allowHosts: csvToList(e.target.value),
+                            },
                           })
                         }
                         className={fieldClass}
@@ -914,10 +1095,15 @@ export default function SettingsPage() {
                     description="Comma-separated scheme allowlist, usually ws and wss."
                   >
                     <input
-                      value={listToCsv(backendConfig.attach.allowSchemes)}
+                      value={listToCsv(
+                        backendConfig.security.attach.allowSchemes,
+                      )}
                       onChange={(e) =>
-                        updateBackendSection("attach", {
-                          allowSchemes: csvToList(e.target.value),
+                        updateBackendSection("security", {
+                          attach: {
+                            ...backendConfig.security.attach,
+                            allowSchemes: csvToList(e.target.value),
+                          },
                         })
                       }
                       className={fieldClass}

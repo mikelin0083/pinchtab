@@ -62,6 +62,24 @@ func TestMaskToken(t *testing.T) {
 	}
 }
 
+func TestGenerateAuthToken(t *testing.T) {
+	token, err := GenerateAuthToken()
+	if err != nil {
+		t.Fatalf("GenerateAuthToken() error = %v", err)
+	}
+	if len(token) != 48 {
+		t.Fatalf("GenerateAuthToken() len = %d, want 48", len(token))
+	}
+	for _, r := range token {
+		switch {
+		case r >= '0' && r <= '9':
+		case r >= 'a' && r <= 'f':
+		default:
+			t.Fatalf("GenerateAuthToken() produced non-hex rune %q", r)
+		}
+	}
+}
+
 func TestLoadConfigDefaults(t *testing.T) {
 	clearConfigEnvVars(t)
 	// Point to non-existent config to test pure defaults
@@ -92,6 +110,21 @@ func TestLoadConfigDefaults(t *testing.T) {
 	}
 	if len(cfg.AttachAllowSchemes) != 2 || cfg.AttachAllowSchemes[0] != "ws" || cfg.AttachAllowSchemes[1] != "wss" {
 		t.Errorf("default AttachAllowSchemes = %v, want [ws wss]", cfg.AttachAllowSchemes)
+	}
+	if !cfg.IDPI.Enabled {
+		t.Errorf("default IDPI.Enabled = %v, want true", cfg.IDPI.Enabled)
+	}
+	if len(cfg.IDPI.AllowedDomains) != 3 || cfg.IDPI.AllowedDomains[0] != "127.0.0.1" {
+		t.Errorf("default IDPI.AllowedDomains = %v, want local-only allowlist", cfg.IDPI.AllowedDomains)
+	}
+	if !cfg.IDPI.StrictMode {
+		t.Errorf("default IDPI.StrictMode = %v, want true", cfg.IDPI.StrictMode)
+	}
+	if !cfg.IDPI.ScanContent {
+		t.Errorf("default IDPI.ScanContent = %v, want true", cfg.IDPI.ScanContent)
+	}
+	if !cfg.IDPI.WrapContent {
+		t.Errorf("default IDPI.WrapContent = %v, want true", cfg.IDPI.WrapContent)
 	}
 }
 
@@ -161,8 +194,38 @@ func TestDefaultFileConfig(t *testing.T) {
 	if fc.MultiInstance.Strategy != "simple" {
 		t.Errorf("DefaultFileConfig.MultiInstance.Strategy = %v, want simple", fc.MultiInstance.Strategy)
 	}
-	if len(fc.Attach.AllowSchemes) != 2 || fc.Attach.AllowSchemes[0] != "ws" || fc.Attach.AllowSchemes[1] != "wss" {
-		t.Errorf("DefaultFileConfig.Attach.AllowSchemes = %v, want [ws wss]", fc.Attach.AllowSchemes)
+	if len(fc.Security.Attach.AllowSchemes) != 2 || fc.Security.Attach.AllowSchemes[0] != "ws" || fc.Security.Attach.AllowSchemes[1] != "wss" {
+		t.Errorf("DefaultFileConfig.Security.Attach.AllowSchemes = %v, want [ws wss]", fc.Security.Attach.AllowSchemes)
+	}
+	if fc.Security.AllowEvaluate == nil || *fc.Security.AllowEvaluate {
+		t.Errorf("DefaultFileConfig.Security.AllowEvaluate = %v, want explicit false", formatBoolPtr(fc.Security.AllowEvaluate))
+	}
+	if fc.Security.AllowMacro == nil || *fc.Security.AllowMacro {
+		t.Errorf("DefaultFileConfig.Security.AllowMacro = %v, want explicit false", formatBoolPtr(fc.Security.AllowMacro))
+	}
+	if fc.Security.AllowScreencast == nil || *fc.Security.AllowScreencast {
+		t.Errorf("DefaultFileConfig.Security.AllowScreencast = %v, want explicit false", formatBoolPtr(fc.Security.AllowScreencast))
+	}
+	if fc.Security.AllowDownload == nil || *fc.Security.AllowDownload {
+		t.Errorf("DefaultFileConfig.Security.AllowDownload = %v, want explicit false", formatBoolPtr(fc.Security.AllowDownload))
+	}
+	if fc.Security.AllowUpload == nil || *fc.Security.AllowUpload {
+		t.Errorf("DefaultFileConfig.Security.AllowUpload = %v, want explicit false", formatBoolPtr(fc.Security.AllowUpload))
+	}
+	if !fc.Security.IDPI.Enabled {
+		t.Errorf("DefaultFileConfig.Security.IDPI.Enabled = %v, want true", fc.Security.IDPI.Enabled)
+	}
+	if len(fc.Security.IDPI.AllowedDomains) != 3 || fc.Security.IDPI.AllowedDomains[0] != "127.0.0.1" {
+		t.Errorf("DefaultFileConfig.Security.IDPI.AllowedDomains = %v, want local-only allowlist", fc.Security.IDPI.AllowedDomains)
+	}
+	if !fc.Security.IDPI.StrictMode {
+		t.Errorf("DefaultFileConfig.Security.IDPI.StrictMode = %v, want true", fc.Security.IDPI.StrictMode)
+	}
+	if !fc.Security.IDPI.ScanContent {
+		t.Errorf("DefaultFileConfig.Security.IDPI.ScanContent = %v, want true", fc.Security.IDPI.ScanContent)
+	}
+	if !fc.Security.IDPI.WrapContent {
+		t.Errorf("DefaultFileConfig.Security.IDPI.WrapContent = %v, want true", fc.Security.IDPI.WrapContent)
 	}
 }
 
@@ -189,16 +252,16 @@ func TestLoadNestedConfig(t *testing.T) {
 			"tabEvictionPolicy": "close_oldest"
 		},
 		"security": {
-			"allowEvaluate": true
+			"allowEvaluate": true,
+			"attach": {
+				"enabled": true,
+				"allowHosts": ["localhost", "chrome.internal"],
+				"allowSchemes": ["wss"]
+			}
 		},
 		"multiInstance": {
 			"strategy": "explicit",
 			"allocationPolicy": "round_robin"
-		},
-		"attach": {
-			"enabled": true,
-			"allowHosts": ["localhost", "chrome.internal"],
-			"allowSchemes": ["wss"]
 		},
 		"timeouts": {
 			"actionSec": 60,
@@ -378,8 +441,8 @@ func TestIsLegacyConfig(t *testing.T) {
 			isLegacy: false,
 		},
 		{
-			name:     "nested format with attach",
-			json:     `{"attach": {"enabled": true}}`,
+			name:     "nested format with security.attach",
+			json:     `{"security": {"attach": {"enabled": true}}}`,
 			isLegacy: false,
 		},
 		{
@@ -468,6 +531,77 @@ func TestDefaultFileConfigJSON(t *testing.T) {
 	}
 	if parsed.InstanceDefaults.Mode != "headless" {
 		t.Errorf("round-trip InstanceDefaults.Mode = %v, want headless", parsed.InstanceDefaults.Mode)
+	}
+	if parsed.Security.AllowEvaluate == nil || *parsed.Security.AllowEvaluate {
+		t.Errorf("round-trip Security.AllowEvaluate = %v, want explicit false", formatBoolPtr(parsed.Security.AllowEvaluate))
+	}
+	if parsed.Security.AllowMacro == nil || *parsed.Security.AllowMacro {
+		t.Errorf("round-trip Security.AllowMacro = %v, want explicit false", formatBoolPtr(parsed.Security.AllowMacro))
+	}
+	if parsed.Security.AllowScreencast == nil || *parsed.Security.AllowScreencast {
+		t.Errorf("round-trip Security.AllowScreencast = %v, want explicit false", formatBoolPtr(parsed.Security.AllowScreencast))
+	}
+	if parsed.Security.AllowDownload == nil || *parsed.Security.AllowDownload {
+		t.Errorf("round-trip Security.AllowDownload = %v, want explicit false", formatBoolPtr(parsed.Security.AllowDownload))
+	}
+	if parsed.Security.AllowUpload == nil || *parsed.Security.AllowUpload {
+		t.Errorf("round-trip Security.AllowUpload = %v, want explicit false", formatBoolPtr(parsed.Security.AllowUpload))
+	}
+	if !parsed.Security.IDPI.Enabled {
+		t.Errorf("round-trip Security.IDPI.Enabled = %v, want true", parsed.Security.IDPI.Enabled)
+	}
+	if len(parsed.Security.IDPI.AllowedDomains) != 3 || parsed.Security.IDPI.AllowedDomains[0] != "127.0.0.1" {
+		t.Errorf("round-trip Security.IDPI.AllowedDomains = %v, want local-only allowlist", parsed.Security.IDPI.AllowedDomains)
+	}
+	if !parsed.Security.IDPI.StrictMode {
+		t.Errorf("round-trip Security.IDPI.StrictMode = %v, want true", parsed.Security.IDPI.StrictMode)
+	}
+	if !parsed.Security.IDPI.ScanContent {
+		t.Errorf("round-trip Security.IDPI.ScanContent = %v, want true", parsed.Security.IDPI.ScanContent)
+	}
+	if !parsed.Security.IDPI.WrapContent {
+		t.Errorf("round-trip Security.IDPI.WrapContent = %v, want true", parsed.Security.IDPI.WrapContent)
+	}
+}
+
+func TestApplyFileConfigToRuntimeResetsSecurityFlagsToSafeDefaults(t *testing.T) {
+	cfg := &RuntimeConfig{
+		AllowEvaluate:   true,
+		AllowMacro:      true,
+		AllowScreencast: true,
+		AllowDownload:   true,
+		AllowUpload:     true,
+		IDPI: IDPIConfig{
+			Enabled: false,
+		},
+	}
+
+	fc := DefaultFileConfig()
+	ApplyFileConfigToRuntime(cfg, &fc)
+
+	if cfg.AllowEvaluate {
+		t.Errorf("ApplyFileConfigToRuntime AllowEvaluate = %v, want false", cfg.AllowEvaluate)
+	}
+	if cfg.AllowMacro {
+		t.Errorf("ApplyFileConfigToRuntime AllowMacro = %v, want false", cfg.AllowMacro)
+	}
+	if cfg.AllowScreencast {
+		t.Errorf("ApplyFileConfigToRuntime AllowScreencast = %v, want false", cfg.AllowScreencast)
+	}
+	if cfg.AllowDownload {
+		t.Errorf("ApplyFileConfigToRuntime AllowDownload = %v, want false", cfg.AllowDownload)
+	}
+	if cfg.AllowUpload {
+		t.Errorf("ApplyFileConfigToRuntime AllowUpload = %v, want false", cfg.AllowUpload)
+	}
+	if !cfg.IDPI.Enabled {
+		t.Errorf("ApplyFileConfigToRuntime IDPI.Enabled = %v, want true", cfg.IDPI.Enabled)
+	}
+	if len(cfg.IDPI.AllowedDomains) != 3 || cfg.IDPI.AllowedDomains[0] != "127.0.0.1" {
+		t.Errorf("ApplyFileConfigToRuntime IDPI.AllowedDomains = %v, want local-only allowlist", cfg.IDPI.AllowedDomains)
+	}
+	if !cfg.IDPI.StrictMode || !cfg.IDPI.ScanContent || !cfg.IDPI.WrapContent {
+		t.Errorf("ApplyFileConfigToRuntime IDPI = %+v, want strict+scan+wrap enabled", cfg.IDPI)
 	}
 }
 

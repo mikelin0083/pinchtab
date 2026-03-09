@@ -9,6 +9,7 @@
   ],
   "guides": [
     "guides/contributing.md",
+    "guides/security.md",
     "guides/attach-chrome.md",
     "guides/multi-instance.md",
     "guides/identifying-instances.md",

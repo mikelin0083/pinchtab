@@ -20,13 +20,44 @@ import {
   normalizeDashboardServerInfo,
   normalizeMonitoringSnapshot,
 } from "../types";
+import {
+  addTokenToUrl,
+  dispatchAuthRequired,
+  getStoredAuthToken,
+} from "./auth";
 
 const BASE = ""; // Uses proxy in dev
 
-async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + url, options);
+type RequestMeta = {
+  authToken?: string;
+  suppressAuthRedirect?: boolean;
+};
+
+async function request<T>(
+  url: string,
+  options?: RequestInit,
+  meta?: RequestMeta,
+): Promise<T> {
+  const headers = new Headers(options?.headers ?? {});
+  const token = meta?.authToken?.trim() || getStoredAuthToken();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const res = await fetch(BASE + url, {
+    ...options,
+    headers,
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
+    if (
+      res.status === 401 &&
+      !meta?.suppressAuthRedirect &&
+      typeof window !== "undefined"
+    ) {
+      window.localStorage.removeItem("pinchtab.auth.token");
+      dispatchAuthRequired(err.code || "unauthorized");
+    }
     throw new Error(err.error || "Request failed");
   }
   return res.json();
@@ -121,6 +152,17 @@ export async function fetchHealth(): Promise<DashboardServerInfo> {
   );
 }
 
+export async function verifyBackendToken(
+  token: string,
+): Promise<DashboardServerInfo> {
+  return normalizeDashboardServerInfo(
+    await request<DashboardServerInfo>("/health", undefined, {
+      authToken: token,
+      suppressAuthRedirect: true,
+    }),
+  );
+}
+
 export async function fetchBackendConfig(): Promise<BackendConfigState> {
   return normalizeBackendConfigState(
     await request<BackendConfigState>("/api/config"),
@@ -137,6 +179,13 @@ export async function saveBackendConfig(
       body: JSON.stringify(config),
     }),
   );
+}
+
+export async function generateBackendToken(): Promise<string> {
+  const res = await request<{ token: string }>("/api/config/generate-token", {
+    method: "POST",
+  });
+  return res.token;
 }
 
 // SSE Events — endpoint is /api/events
@@ -163,7 +212,9 @@ export function subscribeToEvents(
   handlers: EventHandler,
   options?: { includeMemory?: boolean },
 ): () => void {
-  const url = options?.includeMemory ? "/api/events?memory=1" : "/api/events";
+  const url = addTokenToUrl(
+    options?.includeMemory ? "/api/events?memory=1" : "/api/events",
+  );
   const es = new EventSource(url);
 
   es.addEventListener("init", (e) => {
@@ -206,7 +257,9 @@ export function subscribeToEvents(
 
   // Suppress connection errors (expected on page reload/navigation)
   es.onerror = () => {
-    // SSE will auto-reconnect; silence console noise
+    if (!getStoredAuthToken()) {
+      dispatchAuthRequired("missing_token");
+    }
   };
 
   // Clean up on page unload to prevent ERR_INCOMPLETE_CHUNKED_ENCODING

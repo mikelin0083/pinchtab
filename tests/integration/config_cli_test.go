@@ -340,7 +340,7 @@ func TestConfigCLI_Get_UnknownPath(t *testing.T) {
 	}
 }
 
-// TestConfigCLI_Get_SliceField tests that slice fields (e.g., attach.allowHosts)
+// TestConfigCLI_Get_SliceField tests that slice fields (e.g., security.attach.allowHosts)
 // are returned as comma-separated values.
 func TestConfigCLI_Get_SliceField(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -352,22 +352,22 @@ func TestConfigCLI_Get_SliceField(t *testing.T) {
 		t.Fatalf("config init failed: %v\nOutput: %s", err, out)
 	}
 
-	setCmd := exec.Command(server.BinaryPath, "config", "set", "attach.allowHosts", "127.0.0.1,localhost")
+	setCmd := exec.Command(server.BinaryPath, "config", "set", "security.attach.allowHosts", "127.0.0.1,localhost")
 	setCmd.Env = append(filterTestEnv(), "PINCHTAB_CONFIG="+configPath)
 	if out, err := setCmd.CombinedOutput(); err != nil {
 		t.Fatalf("config set failed: %v\nOutput: %s", err, out)
 	}
 
-	getCmd := exec.Command(server.BinaryPath, "config", "get", "attach.allowHosts")
+	getCmd := exec.Command(server.BinaryPath, "config", "get", "security.attach.allowHosts")
 	getCmd.Env = append(filterTestEnv(), "PINCHTAB_CONFIG="+configPath)
 
 	out, err := getCmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("config get attach.allowHosts failed: %v\nOutput: %s", err, out)
+		t.Fatalf("config get security.attach.allowHosts failed: %v\nOutput: %s", err, out)
 	}
 
 	got := strings.TrimSpace(string(out))
 	if got != "127.0.0.1,localhost" {
-		t.Errorf("config get attach.allowHosts = %q, want %q", got, "127.0.0.1,localhost")
+		t.Errorf("config get security.attach.allowHosts = %q, want %q", got, "127.0.0.1,localhost")
 	}
 }

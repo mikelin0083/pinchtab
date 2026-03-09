@@ -1,15 +1,21 @@
 import { useEffect } from "react";
 import {
-  HashRouter,
+  BrowserRouter,
   Routes,
   Route,
   Navigate,
   useLocation,
+  useNavigate,
 } from "react-router-dom";
 import { useAppStore } from "./stores/useAppStore";
 import { NavBar } from "./components/molecules";
-import { MonitoringPage, ProfilesPage, SettingsPage } from "./pages";
+import { LoginPage, MonitoringPage, ProfilesPage, SettingsPage } from "./pages";
 import * as api from "./services/api";
+import {
+  AUTH_REQUIRED_EVENT,
+  clearStoredAuthToken,
+  getStoredAuthToken,
+} from "./services/auth";
 
 function AppContent() {
   const {
@@ -21,19 +27,42 @@ function AppContent() {
     settings,
   } = useAppStore();
   const location = useLocation();
+  const navigate = useNavigate();
   const memoryMetricsEnabled = settings.monitoring?.memoryMetrics ?? false;
+  const authToken = getStoredAuthToken();
+  const authenticated = authToken !== "";
 
   useEffect(() => {
     document.documentElement.setAttribute("data-site-mode", "agent");
   }, []);
 
-  // Log navigation for debugging
   useEffect(() => {
-    console.log("📍 Navigation:", location.pathname);
-  }, [location]);
+    const handleAuthRequired = () => {
+      clearStoredAuthToken();
+      navigate("/login", {
+        replace: true,
+        state: { from: location.pathname },
+      });
+    };
+    window.addEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+    return () =>
+      window.removeEventListener(AUTH_REQUIRED_EVENT, handleAuthRequired);
+  }, [location.pathname, navigate]);
+
+  useEffect(() => {
+    if (!authenticated && location.pathname !== "/login") {
+      navigate("/login", {
+        replace: true,
+        state: { from: location.pathname },
+      });
+    }
+  }, [authenticated, location.pathname, navigate]);
 
   // Initial load
   useEffect(() => {
+    if (!authenticated) {
+      return;
+    }
     const load = async () => {
       try {
         const [instances, profiles, health] = await Promise.all([
@@ -49,10 +78,13 @@ function AppContent() {
       }
     };
     load();
-  }, [setInstances, setProfiles, setServerInfo]);
+  }, [authenticated, setInstances, setProfiles, setServerInfo]);
 
   // Subscribe to SSE events
   useEffect(() => {
+    if (!authenticated) {
+      return;
+    }
     const unsubscribe = api.subscribeToEvents(
       {
         onInit: (agents) => {
@@ -75,6 +107,7 @@ function AppContent() {
 
     return unsubscribe;
   }, [
+    authenticated,
     applyMonitoringSnapshot,
     memoryMetricsEnabled,
     setAgents,
@@ -82,19 +115,43 @@ function AppContent() {
     setProfiles,
   ]);
 
+  if (!authenticated) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
   return (
     <div className="dashboard-shell flex h-screen flex-col bg-bg-app">
       <NavBar />
       <main className="dashboard-grid flex-1 overflow-hidden">
         <Routes>
-          <Route path="/" element={<Navigate to="/monitoring" replace />} />
-          <Route path="/monitoring" element={<MonitoringPage />} />
-          <Route path="/profiles" element={<ProfilesPage />} />
           <Route
-            path="/agents"
-            element={<Navigate to="/monitoring" replace />}
+            path="/"
+            element={<Navigate to="/dashboard/monitoring" replace />}
           />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route
+            path="/login"
+            element={<Navigate to="/dashboard/monitoring" replace />}
+          />
+          <Route
+            path="/dashboard"
+            element={<Navigate to="/dashboard/monitoring" replace />}
+          />
+          <Route path="/dashboard/monitoring" element={<MonitoringPage />} />
+          <Route path="/dashboard/profiles" element={<ProfilesPage />} />
+          <Route
+            path="/dashboard/agents"
+            element={<Navigate to="/dashboard/monitoring" replace />}
+          />
+          <Route path="/dashboard/settings" element={<SettingsPage />} />
+          <Route
+            path="*"
+            element={<Navigate to="/dashboard/monitoring" replace />}
+          />
         </Routes>
       </main>
     </div>
@@ -103,8 +160,8 @@ function AppContent() {
 
 export default function App() {
   return (
-    <HashRouter>
+    <BrowserRouter>
       <AppContent />
-    </HashRouter>
+    </BrowserRouter>
   );
 }

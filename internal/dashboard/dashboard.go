@@ -136,10 +136,11 @@ func (d *Dashboard) RegisterHandlers(mux *http.ServeMux) {
 	mux.Handle("GET /dashboard/assets/", http.StripPrefix("/dashboard", d.withLongCache(fileServer)))
 	mux.Handle("GET /dashboard/favicon.png", http.StripPrefix("/dashboard", d.withLongCache(fileServer)))
 
-	// SPA: serve dashboard.html for / and /dashboard
+	// SPA: serve dashboard.html for /, /login, and /dashboard/*
 	mux.Handle("GET /{$}", d.withNoCache(http.HandlerFunc(d.handleDashboardUI)))
+	mux.Handle("GET /login", d.withNoCache(http.HandlerFunc(d.handleDashboardUI)))
 	mux.Handle("GET /dashboard", d.withNoCache(http.HandlerFunc(d.handleDashboardUI)))
-	mux.Handle("GET /dashboard/", d.withNoCache(http.HandlerFunc(d.handleDashboardUI)))
+	mux.Handle("GET /dashboard/{path...}", d.withNoCache(http.HandlerFunc(d.handleDashboardUI)))
 }
 
 func (d *Dashboard) handleSSE(w http.ResponseWriter, r *http.Request) {

@@ -20,7 +20,11 @@ import (
 // This is used for spawned instances by the orchestrator
 func runBridgeServer(cfg *config.RuntimeConfig) {
 	listenAddr := cfg.ListenAddr()
-	slog.Info("🦀 Pinchtab Bridge", "listen", listenAddr, "profile", cfg.ProfileDir)
+	printStartupBanner(cfg, startupBannerOptions{
+		Mode:       "bridge",
+		ListenAddr: listenAddr,
+		ProfileDir: cfg.ProfileDir,
+	})
 
 	// Create a bridge instance with lazy initialization
 	// Chrome will be initialized on first request via ensureChrome()
@@ -38,9 +42,7 @@ func runBridgeServer(cfg *config.RuntimeConfig) {
 		})
 	}
 	h.RegisterRoutes(mux, doShutdown)
-	if cfg.AllowEvaluate && cfg.Token == "" {
-		slog.Warn("evaluate endpoint enabled without API token", "hint", "set PINCHTAB_TOKEN for authenticated access")
-	}
+	logSecurityWarnings(cfg)
 
 	// HTTP server
 	server := &http.Server{
@@ -53,7 +55,6 @@ func runBridgeServer(cfg *config.RuntimeConfig) {
 	}
 
 	go func() {
-		slog.Info("bridge listening", "addr", listenAddr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			slog.Error("server error", "err", err)
 			os.Exit(1)

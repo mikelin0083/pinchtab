@@ -37,7 +37,7 @@ With attach:
 The current codebase implements:
 
 - `POST /instances/attach`
-- attach policy in config under `attach`
+- attach policy in config under `security.attach`
 - attached-instance metadata in `GET /instances`
 
 The attach request body is:
@@ -61,10 +61,12 @@ Example:
 
 ```json
 {
-  "attach": {
-    "enabled": true,
-    "allowHosts": ["127.0.0.1", "localhost", "::1"],
-    "allowSchemes": ["ws", "wss"]
+  "security": {
+    "attach": {
+      "enabled": true,
+      "allowHosts": ["127.0.0.1", "localhost", "::1"],
+      "allowSchemes": ["ws", "wss"]
+    }
   }
 }
 ```
@@ -138,7 +140,7 @@ curl -X POST http://localhost:9867/instances/attach \
 Notes:
 
 - `name` is optional; if omitted, the server generates one like `attached-...`
-- the server validates the URL against `attach.allowHosts` and `attach.allowSchemes`
+- the server validates the URL against `security.attach.allowHosts` and `security.attach.allowSchemes`
 
 ---
 

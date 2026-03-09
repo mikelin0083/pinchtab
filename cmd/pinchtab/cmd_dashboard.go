@@ -37,8 +37,12 @@ func runDashboard(cfg *config.RuntimeConfig) {
 		dashPort = "9870"
 	}
 	startedAt := time.Now()
-
-	slog.Info("🦀 PinchTab", "port", dashPort)
+	printStartupBanner(cfg, startupBannerOptions{
+		Mode:       "server",
+		ListenAddr: cfg.Bind + ":" + dashPort,
+		PublicURL:  fmt.Sprintf("http://localhost:%s", dashPort),
+		Strategy:   cfg.Strategy,
+	})
 
 	profilesDir := cfg.ProfilesBaseDir
 	if err := os.MkdirAll(profilesDir, 0755); err != nil {
@@ -143,9 +147,7 @@ func runDashboard(cfg *config.RuntimeConfig) {
 	})
 
 	handler := handlers.LoggingMiddleware(handlers.CorsMiddleware(handlers.AuthMiddleware(cfg, mux)))
-	if cfg.AllowEvaluate && cfg.Token == "" {
-		slog.Warn("evaluate endpoint enabled without API token", "hint", "set PINCHTAB_TOKEN for authenticated access")
-	}
+	logSecurityWarnings(cfg)
 
 	srv := &http.Server{
 		Addr:              cfg.Bind + ":" + dashPort,
@@ -248,8 +250,6 @@ func runDashboard(cfg *config.RuntimeConfig) {
 
 	// Periodic health check: log tabs and Chrome process info every 30 seconds
 	go periodicHealthCheck(orch)
-
-	slog.Info("dashboard ready", "url", fmt.Sprintf("http://localhost:%s", dashPort))
 
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		slog.Error("server", "err", err)

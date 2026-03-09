@@ -55,6 +55,10 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 
 func AuthMiddleware(cfg *config.RuntimeConfig, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isPublicDashboardPath(r.URL.Path) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if cfg.Token != "" {
 			auth := r.Header.Get("Authorization")
 			qToken := r.URL.Query().Get("token")
@@ -82,6 +86,14 @@ func AuthMiddleware(cfg *config.RuntimeConfig, next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func isPublicDashboardPath(path string) bool {
+	switch path {
+	case "/", "/login", "/dashboard", "/dashboard/":
+		return true
+	}
+	return strings.HasPrefix(path, "/dashboard/") || path == "/dashboard/favicon.png"
 }
 
 func CorsMiddleware(next http.Handler) http.Handler {

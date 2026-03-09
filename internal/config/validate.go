@@ -94,10 +94,10 @@ func ValidateFileConfig(fc *FileConfig) []error {
 	}
 
 	// Attach validation
-	for _, scheme := range fc.Attach.AllowSchemes {
+	for _, scheme := range fc.Security.Attach.AllowSchemes {
 		if !isValidAttachScheme(scheme) {
 			errs = append(errs, ValidationError{
-				Field:   "attach.allowSchemes",
+				Field:   "security.attach.allowSchemes",
 				Message: fmt.Sprintf("invalid value %q (must be ws or wss)", scheme),
 			})
 		}

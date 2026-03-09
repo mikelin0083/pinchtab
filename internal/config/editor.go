@@ -32,12 +32,10 @@ func SetConfigValue(fc *FileConfig, path string, value string) error {
 		return setProfilesField(&fc.Profiles, field, value)
 	case "multiInstance":
 		return setMultiInstanceField(&fc.MultiInstance, field, value)
-	case "attach":
-		return setAttachField(&fc.Attach, field, value)
 	case "timeouts":
 		return setTimeoutsField(&fc.Timeouts, field, value)
 	default:
-		return fmt.Errorf("unknown section %q (valid: server, browser, instanceDefaults, security, profiles, multiInstance, attach, timeouts)", section)
+		return fmt.Errorf("unknown section %q (valid: server, browser, instanceDefaults, security, profiles, multiInstance, timeouts)", section)
 	}
 }
 
@@ -132,6 +130,13 @@ func setInstanceDefaultsField(c *InstanceDefaultsConfig, field, value string) er
 }
 
 func setSecurityField(s *SecurityConfig, field, value string) error {
+	if strings.HasPrefix(field, "attach.") {
+		return setAttachField(&s.Attach, strings.TrimPrefix(field, "attach."), value)
+	}
+	if strings.HasPrefix(field, "idpi.") {
+		return setIDPIField(&s.IDPI, strings.TrimPrefix(field, "idpi."), value)
+	}
+
 	b, err := parseBool(value)
 	if err != nil {
 		return fmt.Errorf("security.%s: %w", field, err)
@@ -216,7 +221,7 @@ func setAttachField(a *AttachConfig, field, value string) error {
 	case "enabled":
 		b, err := parseBool(value)
 		if err != nil {
-			return fmt.Errorf("attach.enabled: %w", err)
+			return fmt.Errorf("security.attach.enabled: %w", err)
 		}
 		a.Enabled = &b
 	case "allowHosts":
@@ -224,13 +229,13 @@ func setAttachField(a *AttachConfig, field, value string) error {
 	case "allowSchemes":
 		a.AllowSchemes = parseCSVList(value)
 	default:
-		return fmt.Errorf("unknown field attach.%s", field)
+		return fmt.Errorf("unknown field security.attach.%s", field)
 	}
 	return nil
 }
 
 // GetConfigValue reads a dotted-path field from FileConfig and returns its string representation.
-// The path format matches SetConfigValue (e.g., "server.port", "attach.allowHosts").
+// The path format matches SetConfigValue (e.g., "server.port", "security.attach.allowHosts").
 // Pointer fields that are unset return an empty string.
 // Slice fields are returned as comma-separated values.
 func GetConfigValue(fc *FileConfig, path string) (string, error) {
@@ -254,12 +259,10 @@ func GetConfigValue(fc *FileConfig, path string) (string, error) {
 		return getProfilesField(&fc.Profiles, field)
 	case "multiInstance":
 		return getMultiInstanceField(&fc.MultiInstance, field)
-	case "attach":
-		return getAttachField(&fc.Attach, field)
 	case "timeouts":
 		return getTimeoutsField(&fc.Timeouts, field)
 	default:
-		return "", fmt.Errorf("unknown section %q (valid: server, browser, instanceDefaults, security, profiles, multiInstance, attach, timeouts)", section)
+		return "", fmt.Errorf("unknown section %q (valid: server, browser, instanceDefaults, security, profiles, multiInstance, timeouts)", section)
 	}
 }
 
@@ -323,6 +326,13 @@ func getInstanceDefaultsField(c *InstanceDefaultsConfig, field string) (string, 
 }
 
 func getSecurityField(s *SecurityConfig, field string) (string, error) {
+	if strings.HasPrefix(field, "attach.") {
+		return getAttachField(&s.Attach, strings.TrimPrefix(field, "attach."))
+	}
+	if strings.HasPrefix(field, "idpi.") {
+		return getIDPIField(&s.IDPI, strings.TrimPrefix(field, "idpi."))
+	}
+
 	switch field {
 	case "allowEvaluate":
 		return formatBoolPtr(s.AllowEvaluate), nil
@@ -374,7 +384,62 @@ func getAttachField(a *AttachConfig, field string) (string, error) {
 	case "allowSchemes":
 		return strings.Join(a.AllowSchemes, ","), nil
 	default:
-		return "", fmt.Errorf("unknown field attach.%s", field)
+		return "", fmt.Errorf("unknown field security.attach.%s", field)
+	}
+}
+
+func setIDPIField(i *IDPIConfig, field, value string) error {
+	switch field {
+	case "enabled":
+		b, err := parseBool(value)
+		if err != nil {
+			return fmt.Errorf("security.idpi.enabled: %w", err)
+		}
+		i.Enabled = b
+	case "allowedDomains":
+		i.AllowedDomains = parseCSVList(value)
+	case "strictMode":
+		b, err := parseBool(value)
+		if err != nil {
+			return fmt.Errorf("security.idpi.strictMode: %w", err)
+		}
+		i.StrictMode = b
+	case "scanContent":
+		b, err := parseBool(value)
+		if err != nil {
+			return fmt.Errorf("security.idpi.scanContent: %w", err)
+		}
+		i.ScanContent = b
+	case "wrapContent":
+		b, err := parseBool(value)
+		if err != nil {
+			return fmt.Errorf("security.idpi.wrapContent: %w", err)
+		}
+		i.WrapContent = b
+	case "customPatterns":
+		i.CustomPatterns = parseCSVList(value)
+	default:
+		return fmt.Errorf("unknown field security.idpi.%s", field)
+	}
+	return nil
+}
+
+func getIDPIField(i *IDPIConfig, field string) (string, error) {
+	switch field {
+	case "enabled":
+		return strconv.FormatBool(i.Enabled), nil
+	case "allowedDomains":
+		return strings.Join(i.AllowedDomains, ","), nil
+	case "strictMode":
+		return strconv.FormatBool(i.StrictMode), nil
+	case "scanContent":
+		return strconv.FormatBool(i.ScanContent), nil
+	case "wrapContent":
+		return strconv.FormatBool(i.WrapContent), nil
+	case "customPatterns":
+		return strings.Join(i.CustomPatterns, ","), nil
+	default:
+		return "", fmt.Errorf("unknown field security.idpi.%s", field)
 	}
 }
 

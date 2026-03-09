@@ -166,50 +166,29 @@ Read more in the [Core Concepts](https://pinchtab.com/docs/core-concepts) guide.
 
 ---
 
-## Security — Prompt Injection Defense (IDPI)
+## Security
 
-When an AI agent fetches arbitrary web pages, attackers can embed hidden instructions in the page content that attempt to override the agent's system prompt. PinchTab includes an optional, layered defense against this threat called **IDPI** (Indirect Prompt Injection defense).
+PinchTab defaults to a local-first posture:
 
-Enable it in your `config.json`:
+- `server.bind = 127.0.0.1`
+- sensitive endpoint families are off by default
+- attach is off by default
+- IDPI is enabled by default with a local-only website allowlist
 
-```json
-{
-  "security": {
-    "idpi": {
-      "enabled": true,
-      "allowedDomains": ["github.com", "*.github.com"],
-      "strictMode": false,
-      "scanContent": true,
-      "wrapContent": false,
-      "customPatterns": []
-    }
-  }
-}
-```
+Two controls are independent and both matter:
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `enabled` | `false` | Master switch. No IDPI checks are performed when false |
-| `allowedDomains` | `[]` | Navigation whitelist. Patterns: `"example.com"`, `"*.example.com"`, `"*"` |
-| `strictMode` | `false` | `true` = HTTP 403 block; `false` = warn via `X-IDPI-Warning` header |
-| `scanContent` | `false` | Scan `/snapshot` and `/text` responses for injection phrases |
-| `wrapContent` | `false` | Wrap `/text` output in `<untrusted_web_content>` delimiters for downstream LLMs |
-| `customPatterns` | `[]` | Additional injection phrases to detect (case-insensitive) |
+- the API token controls who can use the server
+- the security feature gates control what the server is allowed to do
 
-All fields default to `false`/empty — existing behaviour is completely unchanged unless you opt in.
+IDPI adds a browser-content defense layer by restricting allowed domains and protecting extracted content from indirect prompt injection.
+
+See the full guide: [docs/guides/security.md](docs/guides/security.md)
 
 ---
 
 ## Documentation
 
 Full docs at **[pinchtab.com/docs](https://pinchtab.com/docs)**
-
-- **[Getting Started](https://pinchtab.com/docs/get-started)** — Install and run
-- **[Core Concepts](https://pinchtab.com/docs/core-concepts)** — Instances, profiles, tabs
-- **[Headless vs Headed](https://pinchtab.com/docs/headless-vs-headed)** — Choose the right mode
-- **[API Reference](https://pinchtab.com/docs/api-reference)** — HTTP endpoints
-- **[CLI Reference](https://pinchtab.com/docs/cli-reference)** — Command-line commands
-- **[Configuration](https://pinchtab.com/docs/configuration)** — Config file and runtime settings
 
 ### MCP (SMCP) integration
 

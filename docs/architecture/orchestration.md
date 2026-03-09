@@ -70,9 +70,9 @@ flowchart LR
 
 Current attach behavior:
 
-- requires `attach.enabled`
-- validates the CDP URL against `attach.allowSchemes`
-- validates the host against `attach.allowHosts`
+- requires `security.attach.enabled`
+- validates the CDP URL against `security.attach.allowSchemes`
+- validates the host against `security.attach.allowHosts`
 - registers the instance as `attached: true`
 - does not start or stop an external Chrome process
 

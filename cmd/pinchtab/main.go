@@ -45,6 +45,15 @@ func main() {
 		os.Exit(0)
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "security" {
+		if len(os.Args) > 2 && (os.Args[2] == "help" || os.Args[2] == "--help" || os.Args[2] == "-h") {
+			securityUsage()
+			os.Exit(0)
+		}
+		handleSecurityCommand(cfg)
+		os.Exit(0)
+	}
+
 	// CLI commands
 	if len(os.Args) > 1 && isCLICommand(os.Args[1]) {
 		runCLI(cfg)

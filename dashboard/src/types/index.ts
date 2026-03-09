@@ -87,6 +87,8 @@ export interface BackendSecurityConfig {
   allowScreencast: boolean;
   allowDownload: boolean;
   allowUpload: boolean;
+  attach: BackendAttachConfig;
+  idpi: BackendIDPIConfig;
 }
 
 export interface BackendProfilesConfig {
@@ -107,6 +109,15 @@ export interface BackendAttachConfig {
   allowSchemes: string[];
 }
 
+export interface BackendIDPIConfig {
+  enabled: boolean;
+  allowedDomains: string[];
+  strictMode: boolean;
+  scanContent: boolean;
+  wrapContent: boolean;
+  customPatterns: string[];
+}
+
 export interface BackendTimeoutsConfig {
   actionSec: number;
   navigateSec: number;
@@ -121,7 +132,6 @@ export interface BackendConfig {
   security: BackendSecurityConfig;
   profiles: BackendProfilesConfig;
   multiInstance: BackendMultiInstanceConfig;
-  attach: BackendAttachConfig;
   timeouts: BackendTimeoutsConfig;
 }
 
@@ -165,6 +175,19 @@ export const defaultBackendConfig: BackendConfig = {
     allowScreencast: false,
     allowDownload: false,
     allowUpload: false,
+    attach: {
+      enabled: false,
+      allowHosts: ["127.0.0.1", "localhost", "::1"],
+      allowSchemes: ["ws", "wss"],
+    },
+    idpi: {
+      enabled: true,
+      allowedDomains: ["127.0.0.1", "localhost", "::1"],
+      strictMode: true,
+      scanContent: true,
+      wrapContent: true,
+      customPatterns: [],
+    },
   },
   profiles: {
     baseDir: "",
@@ -175,11 +198,6 @@ export const defaultBackendConfig: BackendConfig = {
     allocationPolicy: "fcfs",
     instancePortStart: 9868,
     instancePortEnd: 9968,
-  },
-  attach: {
-    enabled: false,
-    allowHosts: ["127.0.0.1", "localhost", "::1"],
-    allowSchemes: ["ws", "wss"],
   },
   timeouts: {
     actionSec: 30,
@@ -211,6 +229,26 @@ export function normalizeBackendConfig(
     security: {
       ...defaultBackendConfig.security,
       ...(input?.security ?? {}),
+      attach: {
+        ...defaultBackendConfig.security.attach,
+        ...(input?.security?.attach ?? {}),
+        allowHosts:
+          input?.security?.attach?.allowHosts ??
+          defaultBackendConfig.security.attach.allowHosts,
+        allowSchemes:
+          input?.security?.attach?.allowSchemes ??
+          defaultBackendConfig.security.attach.allowSchemes,
+      },
+      idpi: {
+        ...defaultBackendConfig.security.idpi,
+        ...(input?.security?.idpi ?? {}),
+        allowedDomains:
+          input?.security?.idpi?.allowedDomains ??
+          defaultBackendConfig.security.idpi.allowedDomains,
+        customPatterns:
+          input?.security?.idpi?.customPatterns ??
+          defaultBackendConfig.security.idpi.customPatterns,
+      },
     },
     profiles: {
       ...defaultBackendConfig.profiles,
@@ -219,14 +257,6 @@ export function normalizeBackendConfig(
     multiInstance: {
       ...defaultBackendConfig.multiInstance,
       ...(input?.multiInstance ?? {}),
-    },
-    attach: {
-      ...defaultBackendConfig.attach,
-      ...(input?.attach ?? {}),
-      allowHosts:
-        input?.attach?.allowHosts ?? defaultBackendConfig.attach.allowHosts,
-      allowSchemes:
-        input?.attach?.allowSchemes ?? defaultBackendConfig.attach.allowSchemes,
     },
     timeouts: {
       ...defaultBackendConfig.timeouts,

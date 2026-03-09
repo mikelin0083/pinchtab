@@ -176,7 +176,9 @@ func TestValidateFileConfig_InvalidAttachScheme(t *testing.T) {
 
 	for _, tt := range tests {
 		fc := &FileConfig{
-			Attach: AttachConfig{AllowSchemes: tt.schemes},
+			Security: SecurityConfig{
+				Attach: AttachConfig{AllowSchemes: tt.schemes},
+			},
 		}
 		errs := ValidateFileConfig(fc)
 		hasErr := len(errs) > 0

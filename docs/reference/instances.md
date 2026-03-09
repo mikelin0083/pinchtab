@@ -202,4 +202,4 @@ curl -X POST http://localhost:9867/instances/attach \
 Notes:
 
 - there is no CLI attach command
-- attach is allowed only when enabled in config under `attach`
+- attach is allowed only when enabled in config under `security.attach`

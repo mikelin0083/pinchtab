@@ -38,6 +38,10 @@ type configEnvelope struct {
 	RestartReasons  []string          `json:"restartReasons,omitempty"`
 }
 
+type tokenEnvelope struct {
+	Token string `json:"token"`
+}
+
 type healthEnvelope struct {
 	Status          string   `json:"status"`
 	Mode            string   `json:"mode"`
@@ -76,6 +80,7 @@ func NewConfigAPI(
 func (c *ConfigAPI) RegisterHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/config", c.HandleGetConfig)
 	mux.HandleFunc("PUT /api/config", c.HandlePutConfig)
+	mux.HandleFunc("POST /api/config/generate-token", c.HandleGenerateToken)
 }
 
 func (c *ConfigAPI) HandleHealth(w http.ResponseWriter, r *http.Request) {
@@ -150,6 +155,15 @@ func (c *ConfigAPI) HandlePutConfig(w http.ResponseWriter, r *http.Request) {
 		RestartRequired: len(restartReasons) > 0,
 		RestartReasons:  restartReasons,
 	})
+}
+
+func (c *ConfigAPI) HandleGenerateToken(w http.ResponseWriter, r *http.Request) {
+	token, err := config.GenerateAuthToken()
+	if err != nil {
+		web.Error(w, 500, err)
+		return
+	}
+	web.JSON(w, 200, tokenEnvelope{Token: token})
 }
 
 func (c *ConfigAPI) healthInfo() (healthEnvelope, error) {

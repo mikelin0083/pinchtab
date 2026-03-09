@@ -18,7 +18,7 @@ Today, the main production shape is:
 PinchTab also supports an advanced attach path:
 
 - the server can register an externally managed Chrome instance through `POST /instances/attach`
-- attach is policy-gated by `attach.enabled`, `attach.allowHosts`, and `attach.allowSchemes`
+- attach is policy-gated by `security.attach.enabled`, `security.attach.allowHosts`, and `security.attach.allowSchemes`
 
 The current managed implementation is bridge-backed. Any direct-CDP-only managed model is architectural discussion elsewhere, not the default runtime path in this codebase.
 

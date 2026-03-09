@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAppStore } from "../../stores/useAppStore";
 import "./NavBar.css";
 
@@ -10,9 +10,9 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { id: "monitoring", path: "/monitoring", label: "Monitoring" },
-  { id: "profiles", path: "/profiles", label: "Profiles" },
-  { id: "settings", path: "/settings", label: "Settings" },
+  { id: "monitoring", path: "/dashboard/monitoring", label: "Monitoring" },
+  { id: "profiles", path: "/dashboard/profiles", label: "Profiles" },
+  { id: "settings", path: "/dashboard/settings", label: "Settings" },
 ];
 
 interface NavBarProps {
@@ -25,6 +25,7 @@ export default function NavBar({ onRefresh }: NavBarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const tabsRef = useRef<HTMLElement>(null);
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -44,7 +45,7 @@ export default function NavBar({ onRefresh }: NavBarProps) {
       const num = parseInt(e.key);
       if (num >= 1 && num <= tabs.length) {
         e.preventDefault();
-        window.location.hash = tabs[num - 1].path;
+        navigate(tabs[num - 1].path);
         return;
       }
       if (e.key === "r" && onRefresh) {
@@ -54,7 +55,7 @@ export default function NavBar({ onRefresh }: NavBarProps) {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onRefresh, handleRefresh]);
+  }, [navigate, onRefresh, handleRefresh]);
 
   return (
     <header className="sticky top-0 z-50 border-b border-border-subtle bg-bg-app/95 backdrop-blur">

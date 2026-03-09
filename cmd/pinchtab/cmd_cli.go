@@ -24,6 +24,7 @@ MODES:
   pinchtab server           Start full server explicitly
   pinchtab bridge           Start single-instance bridge-only server
   pinchtab connect <name>   Get URL for a running profile
+  pinchtab security         Review runtime security posture
 
 QUICK START (requires running server):
   pinchtab quick <url>                  Navigate + analyze page (beginner-friendly)
