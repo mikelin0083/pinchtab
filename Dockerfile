@@ -11,7 +11,7 @@ RUN bun run build
 # Dashboard dist is embedded via Go's embed package.
 # Vite always outputs index.html; rename to dashboard.html so it doesn't
 # collide with http.FileServer's automatic index.html handling at /dashboard/.
-FROM golang:1.26-alpine3.21 AS builder
+FROM golang:1.26-alpine AS builder
 RUN apk add --no-cache git
 WORKDIR /build
 COPY go.mod go.sum ./
