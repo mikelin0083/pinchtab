@@ -13,7 +13,7 @@ describe("ScreencastTile", () => {
     vi.clearAllMocks();
     vi.stubGlobal(
       "location",
-      new URL("https://browser.zakirov.dev/dashboard/profiles"),
+      new URL("https://pinchtab.com/dashboard/profiles"),
     );
     window.localStorage.setItem("pinchtab.auth.token", "secret-token");
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
@@ -34,14 +34,14 @@ describe("ScreencastTile", () => {
         instanceId="inst_123"
         tabId="tab_456"
         label="Example"
-        url="https://example.com"
+        url="https://pinchtab.com"
       />,
     );
 
     await waitFor(() => expect(webSocketMock).toHaveBeenCalledTimes(1));
 
     expect(webSocketMock).toHaveBeenCalledWith(
-      "wss://browser.zakirov.dev/instances/inst_123/proxy/screencast?tabId=tab_456&quality=30&maxWidth=800&fps=1&token=secret-token",
+      "wss://pinchtab.com/instances/inst_123/proxy/screencast?tabId=tab_456&quality=30&maxWidth=800&fps=1&token=secret-token",
     );
   });
 });
