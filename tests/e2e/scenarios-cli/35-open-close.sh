@@ -14,15 +14,6 @@ assert_output_contains "title" "returns page title"
 end_test
 
 # ─────────────────────────────────────────────────────────────────
-start_test "pinchtab open --new-tab <url>"
-
-pt_ok open --new-tab "${FIXTURES_URL}/form.html"
-assert_output_json
-assert_output_contains "tabId" "returns tab ID for new tab"
-
-end_test
-
-# ─────────────────────────────────────────────────────────────────
 start_test "pinchtab open --block-images <url>"
 
 pt_ok open --block-images "${FIXTURES_URL}/index.html"
@@ -79,6 +70,25 @@ start_test "pinchtab close (no args, no --tab → error)"
 
 pt_fail close
 assert_output_contains "specify a tab ID" "requires tab ID"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────
+start_test "pinchtab goto <url> (alias for open)"
+
+pt_ok goto "${FIXTURES_URL}/index.html"
+assert_output_json
+assert_output_contains "tabId" "goto works as alias"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "pinchtab navigate <url> (alias for open)"
+
+pt_ok navigate "${FIXTURES_URL}/index.html"
+assert_output_json
+assert_output_contains "tabId" "navigate works as alias"
 
 end_test
 

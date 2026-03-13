@@ -88,9 +88,10 @@ var screenshotCmd = &cobra.Command{
 }
 
 var openCmd = &cobra.Command{
-	Use:   "open <url>",
-	Short: "Open a URL (navigates current tab or creates new)",
-	Args:  cobra.ExactArgs(1),
+	Use:     "open <url>",
+	Aliases: []string{"goto", "navigate"},
+	Short:   "Open a URL in the current tab",
+	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		cfg := config.Load()
 		runCLIWith(cfg, func(client *http.Client, base, token string) {
@@ -404,7 +405,6 @@ func init() {
 	textCmd.Flags().Bool("raw", false, "Raw extraction mode")
 	textCmd.Flags().String("tab", "", "Tab ID")
 
-	openCmd.Flags().Bool("new-tab", false, "Open in new tab")
 	openCmd.Flags().Bool("block-images", false, "Block image loading")
 	openCmd.Flags().Bool("block-ads", false, "Block ads")
 	openCmd.Flags().String("tab", "", "Tab ID")
