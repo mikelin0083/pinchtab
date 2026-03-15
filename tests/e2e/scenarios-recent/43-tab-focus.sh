@@ -56,7 +56,7 @@ start_test "Focus missing tabId returns 400"
 
 pt_post /tab "{\"action\":\"focus\"}"
 assert_http_status 400 "missing tabId returns 400"
-assert_json_contains "$RESULT" ".error|.message" "tabId" "error message mentions tabId"
+assert_json_contains "$RESULT" ".error" "tabId" "error message mentions tabId"
 
 end_test
 
@@ -65,7 +65,7 @@ start_test "Focus nonexistent tab returns 404"
 
 pt_post /tab "{\"action\":\"focus\",\"tabId\":\"nonexistent-tab-id-12345\"}"
 assert_http_status 404 "nonexistent tabId returns 404"
-assert_json_contains "$RESULT" ".error|.message" "not found|not exist" "error message indicates tab not found"
+assert_json_contains "$RESULT" ".error" "not found" "error message indicates tab not found"
 
 end_test
 
@@ -74,6 +74,6 @@ start_test "Focus invalid action returns 400"
 
 pt_post /tab "{\"action\":\"invalid\",\"tabId\":\"${TAB_ID_A}\"}"
 assert_http_status 400 "invalid action returns 400"
-assert_json_contains "$RESULT" ".error|.message" "action" "error message mentions action"
+assert_json_contains "$RESULT" ".error" "action" "error message mentions action"
 
 end_test
