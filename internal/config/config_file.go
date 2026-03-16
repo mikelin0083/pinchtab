@@ -26,6 +26,9 @@ func DefaultFileConfig() FileConfig {
 	allowUpload := false
 	maxRedirects := -1
 	attachEnabled := true
+	activityEnabled := true
+	activitySessionIdleSec := 1800
+	activityRetentionDays := 1
 	return FileConfig{
 		ConfigVersion: CurrentConfigVersion,
 		Server: ServerConfig{
@@ -85,19 +88,27 @@ func DefaultFileConfig() FileConfig {
 			ShutdownSec: 10,
 			WaitNavMs:   1000,
 		},
+		Observability: ObservabilityFileConfig{
+			Activity: ActivityFileConfig{
+				Enabled:        &activityEnabled,
+				SessionIdleSec: &activitySessionIdleSec,
+				RetentionDays:  &activityRetentionDays,
+			},
+		},
 	}
 }
 
 type fileConfigJSON struct {
-	ConfigVersion    string                     `json:"configVersion,omitempty"`
-	Server           serverConfigJSON           `json:"server"`
-	Browser          browserConfigJSON          `json:"browser"`
-	InstanceDefaults instanceDefaultsConfigJSON `json:"instanceDefaults"`
-	Security         securityConfigJSON         `json:"security"`
-	Profiles         profilesConfigJSON         `json:"profiles"`
-	MultiInstance    multiInstanceConfigJSON    `json:"multiInstance"`
-	Timeouts         timeoutsConfigJSON         `json:"timeouts"`
-	Scheduler        schedulerFileConfigJSON    `json:"scheduler"`
+	ConfigVersion    string                      `json:"configVersion,omitempty"`
+	Server           serverConfigJSON            `json:"server"`
+	Browser          browserConfigJSON           `json:"browser"`
+	InstanceDefaults instanceDefaultsConfigJSON  `json:"instanceDefaults"`
+	Security         securityConfigJSON          `json:"security"`
+	Profiles         profilesConfigJSON          `json:"profiles"`
+	MultiInstance    multiInstanceConfigJSON     `json:"multiInstance"`
+	Timeouts         timeoutsConfigJSON          `json:"timeouts"`
+	Scheduler        schedulerFileConfigJSON     `json:"scheduler"`
+	Observability    observabilityFileConfigJSON `json:"observability"`
 }
 
 type serverConfigJSON struct {
@@ -195,6 +206,16 @@ type schedulerFileConfigJSON struct {
 	WorkerCount       *int   `json:"workerCount"`
 }
 
+type observabilityFileConfigJSON struct {
+	Activity activityConfigJSON `json:"activity"`
+}
+
+type activityConfigJSON struct {
+	Enabled        *bool `json:"enabled"`
+	SessionIdleSec *int  `json:"sessionIdleSec"`
+	RetentionDays  *int  `json:"retentionDays"`
+}
+
 func copyStringSlice(items []string) []string {
 	if items == nil {
 		return []string{}
@@ -289,6 +310,13 @@ func (fc FileConfig) MarshalJSON() ([]byte, error) {
 			ResultTTLSec:      fc.Scheduler.ResultTTLSec,
 			WorkerCount:       fc.Scheduler.WorkerCount,
 		},
+		Observability: observabilityFileConfigJSON{
+			Activity: activityConfigJSON{
+				Enabled:        fc.Observability.Activity.Enabled,
+				SessionIdleSec: fc.Observability.Activity.SessionIdleSec,
+				RetentionDays:  fc.Observability.Activity.RetentionDays,
+			},
+		},
 	})
 }
 
@@ -319,6 +347,9 @@ func FileConfigFromRuntime(cfg *RuntimeConfig) FileConfig {
 	restartInitBackoffSec := int(cfg.RestartInitBackoff / time.Second)
 	restartMaxBackoffSec := int(cfg.RestartMaxBackoff / time.Second)
 	restartStableAfterSec := int(cfg.RestartStableAfter / time.Second)
+	activityEnabled := cfg.Observability.Activity.Enabled
+	activitySessionIdleSec := cfg.Observability.Activity.SessionIdleSec
+	activityRetentionDays := cfg.Observability.Activity.RetentionDays
 
 	mode := "headless"
 	if !cfg.Headless {
@@ -388,6 +419,13 @@ func FileConfigFromRuntime(cfg *RuntimeConfig) FileConfig {
 			NavigateSec: int(cfg.NavigateTimeout / time.Second),
 			ShutdownSec: int(cfg.ShutdownTimeout / time.Second),
 			WaitNavMs:   int(cfg.WaitNavDelay / time.Millisecond),
+		},
+		Observability: ObservabilityFileConfig{
+			Activity: ActivityFileConfig{
+				Enabled:        &activityEnabled,
+				SessionIdleSec: &activitySessionIdleSec,
+				RetentionDays:  &activityRetentionDays,
+			},
 		},
 	}
 
