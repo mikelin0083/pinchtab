@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -189,7 +190,7 @@ func TestOrchestrator_Launch_AcceptsValidNames(t *testing.T) {
 	for i, name := range validNames {
 		t.Run(name, func(t *testing.T) {
 			port := 9100 + i
-			inst, err := o.Launch(name, string(rune('0'+port%10))+string(rune('0'+(port/10)%10))+string(rune('0'+(port/100)%10))+string(rune('0'+(port/1000)%10)), true, nil)
+			inst, err := o.Launch(name, strconv.Itoa(port), true, nil)
 			if err != nil {
 				t.Errorf("Launch(%q) unexpected error: %v", name, err)
 				return
@@ -198,6 +199,17 @@ func TestOrchestrator_Launch_AcceptsValidNames(t *testing.T) {
 				t.Errorf("Launch(%q) profileName = %q", name, inst.ProfileName)
 			}
 		})
+	}
+}
+
+func TestOrchestrator_Launch_RejectsInvalidPort(t *testing.T) {
+	runner := &mockRunner{portAvail: true}
+	o := NewOrchestratorWithRunner(t.TempDir(), runner)
+
+	for _, raw := range []string{"abc", "0x1234", "65536"} {
+		if _, err := o.Launch("profile1", raw, true, nil); err == nil {
+			t.Fatalf("Launch should reject invalid port %q", raw)
+		}
 	}
 }
 
