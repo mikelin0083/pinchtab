@@ -8,7 +8,6 @@ import (
 	"sync"
 )
 
-
 // ---------------------------------------------------------------------------
 // ExportEncoder — pluggable format interface
 // ---------------------------------------------------------------------------
@@ -80,23 +79,23 @@ func ListFormats() []string {
 // ExportEntry is the normalized representation of a network request/response.
 // All export formats encode from this struct.
 type ExportEntry struct {
-	StartedDateTime string          `json:"startedDateTime"`
-	Time            float64         `json:"time"`
-	Request         ExportRequest   `json:"request"`
-	Response        ExportResponse  `json:"response"`
-	Timings         ExportTimings   `json:"timings"`
+	StartedDateTime string         `json:"startedDateTime"`
+	Time            float64        `json:"time"`
+	Request         ExportRequest  `json:"request"`
+	Response        ExportResponse `json:"response"`
+	Timings         ExportTimings  `json:"timings"`
 }
 
 // ExportRequest holds the request portion of an entry.
 type ExportRequest struct {
-	Method      string           `json:"method"`
-	URL         string           `json:"url"`
-	HTTPVersion string           `json:"httpVersion"`
-	Headers     []NameValuePair  `json:"headers"`
-	QueryString []NameValuePair  `json:"queryString"`
-	PostData    *ExportPostData  `json:"postData,omitempty"`
-	HeadersSize int              `json:"headersSize"`
-	BodySize    int              `json:"bodySize"`
+	Method      string          `json:"method"`
+	URL         string          `json:"url"`
+	HTTPVersion string          `json:"httpVersion"`
+	Headers     []NameValuePair `json:"headers"`
+	QueryString []NameValuePair `json:"queryString"`
+	PostData    *ExportPostData `json:"postData,omitempty"`
+	HeadersSize int             `json:"headersSize"`
+	BodySize    int             `json:"bodySize"`
 }
 
 // ExportResponse holds the response portion of an entry.

@@ -202,29 +202,29 @@ func (h *Handlers) writeExportFile(
 	}
 
 	if err := enc.Start(f); err != nil {
-		f.Close()
-		os.Remove(tmpPath)
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	for _, entry := range entries {
 		if err := enc.Encode(entry); err != nil {
-			f.Close()
-			os.Remove(tmpPath)
+			_ = f.Close()
+			_ = os.Remove(tmpPath)
 			return err
 		}
 	}
 	if err := enc.Finish(); err != nil {
-		f.Close()
-		os.Remove(tmpPath)
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
 		return err
 	}
 	if err := f.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return err
 	}
 
 	if err := os.Rename(tmpPath, absPath); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return err
 	}
 
@@ -344,8 +344,8 @@ func (h *Handlers) HandleNetworkExportStream(w http.ResponseWriter, r *http.Requ
 
 	enc := factory("PinchTab", h.version())
 	if err := enc.Start(f); err != nil {
-		f.Close()
-		os.Remove(tmpPath)
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
 		httpx.Error(w, 500, fmt.Errorf("start encoder: %w", err))
 		return
 	}
@@ -358,8 +358,8 @@ func (h *Handlers) HandleNetworkExportStream(w http.ResponseWriter, r *http.Requ
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		_ = enc.Finish()
-		f.Close()
-		os.Remove(tmpPath)
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
 		httpx.Error(w, 500, fmt.Errorf("streaming not supported"))
 		return
 	}
@@ -383,12 +383,12 @@ func (h *Handlers) HandleNetworkExportStream(w http.ResponseWriter, r *http.Requ
 			if err := f.Close(); err == nil {
 				// Atomic rename on success (#8)
 				if count > 0 {
-					os.Rename(tmpPath, absPath)
+					_ = os.Rename(tmpPath, absPath)
 				} else {
-					os.Remove(tmpPath)
+					_ = os.Remove(tmpPath)
 				}
 			} else {
-				os.Remove(tmpPath)
+				_ = os.Remove(tmpPath)
 			}
 		})
 	}
@@ -404,7 +404,7 @@ func (h *Handlers) HandleNetworkExportStream(w http.ResponseWriter, r *http.Requ
 			if !ok {
 				finalize()
 				data, _ := json.Marshal(map[string]any{"entries": count, "path": absPath})
-				fmt.Fprintf(w, "event: done\ndata: %s\n\n", data)
+				_, _ = fmt.Fprintf(w, "event: done\ndata: %s\n\n", data)
 				flusher.Flush()
 				return
 			}
@@ -462,11 +462,11 @@ func (h *Handlers) HandleNetworkExportStream(w http.ResponseWriter, r *http.Requ
 			}
 			count++
 			data, _ := json.Marshal(map[string]any{"entries": count, "url": safetruncateURL(entry.URL)})
-			fmt.Fprintf(w, "event: export\ndata: %s\n\n", data)
+			_, _ = fmt.Fprintf(w, "event: export\ndata: %s\n\n", data)
 			flusher.Flush()
 
 		case <-keepalive.C:
-			fmt.Fprintf(w, ": keepalive\n\n")
+			_, _ = fmt.Fprintf(w, ": keepalive\n\n")
 			flusher.Flush()
 		}
 	}
@@ -543,4 +543,3 @@ func safetruncateURL(u string) string {
 	}
 	return u[:maxLen]
 }
-

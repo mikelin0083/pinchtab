@@ -80,9 +80,9 @@ func TestHAREncoder(t *testing.T) {
 	// Verify valid JSON
 	var har struct {
 		Log struct {
-			Version string        `json:"version"`
+			Version string                `json:"version"`
 			Creator struct{ Name string } `json:"creator"`
-			Entries []json.RawMessage    `json:"entries"`
+			Entries []json.RawMessage     `json:"entries"`
 		} `json:"log"`
 	}
 	if err := json.Unmarshal(buf.Bytes(), &har); err != nil {
@@ -103,10 +103,12 @@ func TestHAREncoder_Empty(t *testing.T) {
 	factory := GetFormat("har")
 	var buf bytes.Buffer
 	enc := factory("Test", "0")
-	enc.Start(&buf)
-	enc.Finish()
+	_ = enc.Start(&buf)
+	_ = enc.Finish()
 
-	var har struct{ Log struct{ Entries []json.RawMessage } }
+	var har struct {
+		Log struct{ Entries []json.RawMessage }
+	}
 	if err := json.Unmarshal(buf.Bytes(), &har); err != nil {
 		t.Fatalf("invalid empty HAR: %v", err)
 	}
@@ -124,10 +126,10 @@ func TestNDJSONEncoder(t *testing.T) {
 	entry := makeTestExportEntry()
 	var buf bytes.Buffer
 	enc := factory("", "")
-	enc.Start(&buf)
-	enc.Encode(entry)
-	enc.Encode(entry)
-	enc.Finish()
+	_ = enc.Start(&buf)
+	_ = enc.Encode(entry)
+	_ = enc.Encode(entry)
+	_ = enc.Finish()
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	if len(lines) != 2 {
