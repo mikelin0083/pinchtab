@@ -244,12 +244,12 @@ type activityConfigJSON struct {
 }
 
 type autoSolverFileConfigJSON struct {
-	Enabled       *bool                   `json:"enabled,omitempty"`
-	MaxAttempts   *int                    `json:"maxAttempts,omitempty"`
-	Solvers       []string                `json:"solvers,omitempty"`
-	LLMProvider   string                  `json:"llmProvider,omitempty"`
-	LLMFallback   *bool                   `json:"llmFallback,omitempty"`
-	External      autoSolverExtConfigJSON `json:"external,omitempty"`
+	Enabled     *bool                   `json:"enabled,omitempty"`
+	MaxAttempts *int                    `json:"maxAttempts,omitempty"`
+	Solvers     []string                `json:"solvers,omitempty"`
+	LLMProvider string                  `json:"llmProvider,omitempty"`
+	LLMFallback *bool                   `json:"llmFallback,omitempty"`
+	External    autoSolverExtConfigJSON `json:"external,omitempty"`
 }
 
 type autoSolverExtConfigJSON struct {

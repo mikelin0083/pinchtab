@@ -6,14 +6,14 @@ import "time"
 type IntentType string
 
 const (
-	IntentNormal     IntentType = "normal"      // No challenge or blocker detected
-	IntentCaptcha    IntentType = "captcha"      // CAPTCHA challenge (Turnstile, reCAPTCHA, hCaptcha)
-	IntentLogin      IntentType = "login"        // Login form detected
-	IntentSignup     IntentType = "signup"       // Signup/registration form detected
-	IntentBlocked    IntentType = "blocked"      // Navigation blocked (interstitial, bot gate)
-	IntentOnboarding IntentType = "onboarding"   // Multi-step onboarding flow
-	IntentNavigation IntentType = "navigation"   // Multi-step navigation task
-	IntentUnknown    IntentType = "unknown"      // Page state unclear
+	IntentNormal     IntentType = "normal"     // No challenge or blocker detected
+	IntentCaptcha    IntentType = "captcha"    // CAPTCHA challenge (Turnstile, reCAPTCHA, hCaptcha)
+	IntentLogin      IntentType = "login"      // Login form detected
+	IntentSignup     IntentType = "signup"     // Signup/registration form detected
+	IntentBlocked    IntentType = "blocked"    // Navigation blocked (interstitial, bot gate)
+	IntentOnboarding IntentType = "onboarding" // Multi-step onboarding flow
+	IntentNavigation IntentType = "navigation" // Multi-step navigation task
+	IntentUnknown    IntentType = "unknown"    // Page state unclear
 )
 
 // ActionType describes the kind of browser action to perform.
@@ -101,7 +101,7 @@ type LLMRequest struct {
 	PageURL      string         `json:"pageUrl"`
 	TrimmedHTML  string         `json:"trimmedHtml"`  // Stripped of scripts/styles
 	DetectedType IntentType     `json:"detectedType"` // What we think the page is
-	PrevAttempts []AttemptEntry `json:"prevAttempts"`  // Failed attempts so far
+	PrevAttempts []AttemptEntry `json:"prevAttempts"` // Failed attempts so far
 }
 
 // LLMResponse is the LLM's recommended action.

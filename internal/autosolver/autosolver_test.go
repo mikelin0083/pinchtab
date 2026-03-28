@@ -15,9 +15,9 @@ type mockPage struct {
 	html  string
 }
 
-func (m *mockPage) URL() string              { return m.url }
-func (m *mockPage) Title() string            { return m.title }
-func (m *mockPage) HTML() (string, error)    { return m.html, nil }
+func (m *mockPage) URL() string                 { return m.url }
+func (m *mockPage) Title() string               { return m.title }
+func (m *mockPage) HTML() (string, error)       { return m.html, nil }
 func (m *mockPage) Screenshot() ([]byte, error) { return nil, nil }
 
 type mockExecutor struct {
