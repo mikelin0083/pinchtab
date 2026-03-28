@@ -275,12 +275,16 @@ func TestSolve_ContextCancellation(t *testing.T) {
 	executor := &mockExecutor{}
 
 	result, err := as.Solve(ctx, page, executor)
+	// Depending on timing, Solve may return a context error directly or
+	// terminate with a non-success result after the context is canceled.
 	if err == nil {
-		// Context cancellation may or may not surface as an error
-		// depending on timing; the key check is that it terminates.
+		if ctx.Err() == nil {
+			t.Fatalf("expected context cancellation or solve error; got err=nil and ctx.Err()=nil")
+		}
+	} else if ctx.Err() == nil {
+		t.Fatalf("got error %v but context was not canceled", err)
 	}
 	_ = result
-	_ = err
 }
 
 func TestSolve_PriorityOrdering(t *testing.T) {
