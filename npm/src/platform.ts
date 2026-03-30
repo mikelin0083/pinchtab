@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs';
 
 export interface Platform {
   os: 'darwin' | 'linux' | 'windows';
@@ -46,6 +47,35 @@ export function getBinaryName(platform: Platform): string {
 
 export function getBinDir(): string {
   return path.join(process.env.HOME || process.env.USERPROFILE || '', '.pinchtab', 'bin');
+}
+
+export function findRepoRoot(fromDir: string): string | null {
+  let dir = path.resolve(fromDir);
+
+  while (dir) {
+    if (
+      fs.existsSync(path.join(dir, 'go.mod')) &&
+      fs.existsSync(path.join(dir, 'cmd', 'pinchtab'))
+    ) {
+      return dir;
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+
+  return null;
+}
+
+export function getCheckoutBinaryPath(fromDir: string): string | null {
+  const repoRoot = findRepoRoot(fromDir);
+  if (!repoRoot) {
+    return null;
+  }
+  return path.join(repoRoot, 'pinchtab-dev');
 }
 
 export function getBinaryPath(binaryName: string, version?: string): string {

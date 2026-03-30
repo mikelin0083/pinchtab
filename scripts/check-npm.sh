@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")/../npm"
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR/npm"
 
 echo "Verifying npm package..."
+
+echo "Building source-checkout npm binary..."
+(cd "$ROOT_DIR" && go build -o pinchtab-dev ./cmd/pinchtab)
 
 DESIRED_VERSION="${1:-}"
 if [ -n "$DESIRED_VERSION" ]; then
@@ -65,6 +69,7 @@ for file in "${REQUIRED[@]}"; do
 done
 
 node -c scripts/postinstall.js
+node -c scripts/stage-skills.js
 node -c scripts/sync-skills.js
 
 node -e "

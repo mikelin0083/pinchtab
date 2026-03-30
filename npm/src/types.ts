@@ -37,4 +37,5 @@ export interface PinchtabOptions {
   baseUrl?: string;
   timeout?: number;
   port?: number;
+  token?: string;
 }

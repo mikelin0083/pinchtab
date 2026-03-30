@@ -5,6 +5,25 @@ const { spawn, spawnSync } = require('child_process');
 const os = require('os');
 const fs = require('fs');
 
+function findRepoRoot() {
+  const repoRoot = path.join(__dirname, '..', '..');
+  if (
+    fs.existsSync(path.join(repoRoot, 'go.mod')) &&
+    fs.existsSync(path.join(repoRoot, 'cmd', 'pinchtab'))
+  ) {
+    return repoRoot;
+  }
+  return null;
+}
+
+function getCheckoutBinaryPath() {
+  const repoRoot = findRepoRoot();
+  if (!repoRoot) {
+    return null;
+  }
+  return path.join(repoRoot, 'pinchtab-dev');
+}
+
 function getBinaryName() {
   const platform = process.platform;
   let arch;
@@ -36,6 +55,11 @@ function getVersion() {
 }
 
 function getBinaryPath() {
+  const checkoutBinaryPath = getCheckoutBinaryPath();
+  if (checkoutBinaryPath) {
+    return checkoutBinaryPath;
+  }
+
   // Try version-specific path first: ~/.pinchtab/bin/0.7.0/pinchtab-darwin-arm64
   const version = getVersion();
   const versionedPath = path.join(os.homedir(), '.pinchtab', 'bin', version, getBinaryName());
@@ -109,7 +133,13 @@ if (!fs.existsSync(binaryPath)) {
   console.error('❌ Pinchtab binary not found at:');
   console.error(`  ${binaryPath}`);
   console.error('\nTo fix this, run:');
-  console.error('  npm rebuild pinchtab');
+  if (getCheckoutBinaryPath()) {
+    console.error('  bash scripts/npm-dev-binary.sh');
+    console.error('  # or');
+    console.error('  go build -o ./pinchtab-dev ./cmd/pinchtab');
+  } else {
+    console.error('  npm rebuild pinchtab');
+  }
   process.exit(1);
 }
 

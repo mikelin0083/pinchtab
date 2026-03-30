@@ -8,6 +8,25 @@ const crypto = require('crypto');
 
 const GITHUB_REPO = 'pinchtab/pinchtab';
 
+function findRepoRoot() {
+  const repoRoot = path.join(__dirname, '..', '..');
+  if (
+    fs.existsSync(path.join(repoRoot, 'go.mod')) &&
+    fs.existsSync(path.join(repoRoot, 'cmd', 'pinchtab'))
+  ) {
+    return repoRoot;
+  }
+  return null;
+}
+
+function getCheckoutBinaryPath() {
+  const repoRoot = findRepoRoot();
+  if (!repoRoot) {
+    return null;
+  }
+  return path.join(repoRoot, 'pinchtab-dev');
+}
+
 function getVersion() {
   const pkgPath = path.join(__dirname, '..', 'package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
@@ -54,11 +73,6 @@ function getBinaryName(platform) {
 }
 
 function getBinaryPath(binaryName) {
-  // Allow override via environment variable (useful for Docker, dev, containers)
-  if (process.env.PINCHTAB_BINARY_PATH) {
-    return process.env.PINCHTAB_BINARY_PATH;
-  }
-
   return path.join(os.homedir(), '.pinchtab', 'bin', binaryName);
 }
 
@@ -331,9 +345,18 @@ async function downloadBinary(platform, version) {
     const platform = detectPlatform();
     const version = getVersion();
 
-    // Ensure binary was successfully downloaded
-    // (If PINCHTAB_BINARY_PATH is set, skip download but trust the binary exists)
-    if (!process.env.PINCHTAB_BINARY_PATH) {
+    // Ensure binary was successfully downloaded, unless this is a source checkout
+    // that should use the canonical local pinchtab-dev binary instead.
+    const checkoutBinaryPath = getCheckoutBinaryPath();
+    if (checkoutBinaryPath) {
+      if (!fs.existsSync(checkoutBinaryPath)) {
+        throw new Error(
+          `Expected local source-checkout binary at ${checkoutBinaryPath}\n` +
+            `Build it first with: bash scripts/npm-dev-binary.sh`
+        );
+      }
+      console.log(`✓ Using source-checkout Pinchtab binary: ${checkoutBinaryPath}`);
+    } else {
       const binaryPath = getBinaryPath(getBinaryName(platform));
       const binDir = path.dirname(binaryPath);
 
@@ -396,9 +419,6 @@ async function downloadBinary(platform, version) {
     if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
       console.error('  • Check proxy settings (HTTPS_PROXY / HTTP_PROXY)');
     }
-    console.error('\nFor Docker or custom binaries:');
-    console.error('  export PINCHTAB_BINARY_PATH=/path/to/pinchtab');
-    console.error('  npm rebuild pinchtab');
     process.exit(1);
   }
 })();

@@ -19,7 +19,14 @@ const SKILL_NAME = 'pinchtab';
  * Returns the path to the bundled skills directory inside the npm package.
  */
 function getBundledSkillsDir() {
-  return path.join(__dirname, '..', 'skills', SKILL_NAME);
+  const packagedDir = path.join(__dirname, '..', 'skills', SKILL_NAME);
+  if (fs.existsSync(packagedDir)) {
+    return packagedDir;
+  }
+
+  // In a source checkout, fall back to the repo-root skill so local development
+  // does not depend on prepack having staged npm/skills first.
+  return path.join(__dirname, '..', '..', 'skills', SKILL_NAME);
 }
 
 /**

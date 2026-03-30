@@ -20,16 +20,19 @@ Pushing a tag like `v0.7.0` triggers [release.yml](/Users/luigi/dev/prj/giago/pt
 ## Release steps
 
 1. Verify the branch you want to release is merged to `main`.
-2. Push the release tag:
+2. If the release includes security-impacting changes, update `skills/pinchtab/TRUST.md`:
+   - extend `## Security History` when needed
+   - adjust `**Minimum recommended version:**` if the safe floor changes
+3. Push the release tag:
 
 ```bash
 git tag v0.7.0
 git push origin v0.7.0
 ```
 
-3. Watch the `Release` workflow in GitHub Actions.
-4. Confirm GoReleaser opens a PR in `pinchtab/homebrew-tap`.
-5. Merge that PR.
+4. Watch the `Release` workflow in GitHub Actions.
+5. Confirm GoReleaser opens a PR in `pinchtab/homebrew-tap`.
+6. Merge that PR.
 
 After the tap PR is merged, users can install with:
 

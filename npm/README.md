@@ -27,6 +27,22 @@ On install, the postinstall script automatically:
 - Node.js 16+
 - macOS, Linux, or Windows
 
+### Local Development With A Local Binary
+
+If you are testing the npm package from a local checkout, build the canonical
+repo-local binary first:
+
+```bash
+bash scripts/npm-dev-binary.sh
+cd npm
+npm install
+node bin/pinchtab --version
+```
+
+In a source checkout, the npm package now expects the local binary at
+`../pinchtab-dev` and will fail clearly if it is missing. It does not download a
+release binary in that mode.
+
 ### Proxy Support
 
 Works with corporate proxies. Set standard environment variables:

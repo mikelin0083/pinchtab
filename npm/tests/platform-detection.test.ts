@@ -17,6 +17,30 @@
 
 import { test, describe } from 'node:test';
 import * as assert from 'node:assert';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
+import { findRepoRoot, getCheckoutBinaryPath } from '../src/platform';
+
+function getTestRepoRoot(): string {
+  let dir = path.resolve(__dirname);
+
+  while (dir) {
+    if (
+      fs.existsSync(path.join(dir, 'go.mod')) &&
+      fs.existsSync(path.join(dir, 'cmd', 'pinchtab'))
+    ) {
+      return dir;
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+
+  throw new Error(`Could not find repo root from ${__dirname}`);
+}
 
 /**
  * Extracted detectPlatform logic from postinstall.js
@@ -63,6 +87,22 @@ function getBinaryName(platform: PlatformResult): string {
 }
 
 describe('Platform Detection', () => {
+  describe('source-checkout binary lookup', () => {
+    const repoRoot = getTestRepoRoot();
+
+    test('finds repo root from npm/bin', () => {
+      const fromDir = path.join(repoRoot, 'npm', 'bin');
+      assert.strictEqual(findRepoRoot(fromDir), repoRoot);
+      assert.strictEqual(getCheckoutBinaryPath(fromDir), path.join(repoRoot, 'pinchtab-dev'));
+    });
+
+    test('finds repo root from built SDK output under npm/dist/src', () => {
+      const fromDir = path.join(repoRoot, 'npm', 'dist', 'src');
+      assert.strictEqual(findRepoRoot(fromDir), repoRoot);
+      assert.strictEqual(getCheckoutBinaryPath(fromDir), path.join(repoRoot, 'pinchtab-dev'));
+    });
+  });
+
   describe('detectPlatform', () => {
     test('darwin + x64 → darwin-amd64', () => {
       const platform = detectPlatform('darwin', 'x64');

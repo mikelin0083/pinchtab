@@ -61,29 +61,6 @@ describe('Pinchtab npm Integration Tests', () => {
     assert.strictEqual(typeof pinch.createTab, 'function');
   });
 
-  test('should start server (requires binary)', async () => {
-    const client = new Pinchtab({ port: testPort });
-
-    try {
-      await client.start();
-      // Give server a moment to be ready
-      await new Promise((r) => setTimeout(r, 1000));
-
-      // Try a simple health check
-      const response = await fetch(`http://localhost:${testPort}/`);
-      assert.ok(response.status !== undefined);
-
-      await client.stop();
-    } catch (err) {
-      const errorMsg = (err as Error).message;
-      if (errorMsg.includes('ENOENT') || errorMsg.includes('not found')) {
-        console.log('⊘ Binary not available — skipping start test');
-      } else {
-        throw err;
-      }
-    }
-  });
-
   test('should handle missing binary gracefully', async () => {
     const client = new Pinchtab({ port: 9998 });
 

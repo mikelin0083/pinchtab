@@ -11,9 +11,6 @@ metadata:
         - google-chrome-stable
         - chromium
         - chromium-browser
-      env:
-        - PINCHTAB_TOKEN
-        - PINCHTAB_CONFIG
     homepage: https://github.com/pinchtab/pinchtab
     install:
       - kind: brew

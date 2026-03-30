@@ -25,6 +25,7 @@ Development and CI scripts for PinchTab.
 | `build-dashboard.sh` | Generate TS types (tygo) + build React dashboard + copy to Go embed |
 | `dev.sh` | Full build (dashboard + Go) and run |
 | `docker-smoke.sh` | Smoke-test a Docker image bootstrap path (defaults to `pinchtab-local:test`) |
+| `npm-dev-binary.sh` | Build the canonical `./pinchtab-dev` binary for source-checkout npm-package testing |
 | `run.sh` | Run the existing `./pinchtab` binary |
 
 ## Setup

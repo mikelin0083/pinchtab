@@ -30,6 +30,19 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Resolve version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF_NAME#v}
+          fi
+          VERSION=${VERSION#v}
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Install ClawHub CLI
         run: npm i -g clawhub
 
@@ -40,14 +53,7 @@ jobs:
 
       - name: Publish skill
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
-          elif [ -n "${{ github.event.inputs.version }}" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            VERSION=${GITHUB_REF_NAME#v}
-          fi
-          VERSION=${VERSION#v}
+          VERSION="${{ steps.version.outputs.value }}"
           clawhub publish skills/pinchtab \
             --slug pinchtab \
             --name "Pinchtab" \

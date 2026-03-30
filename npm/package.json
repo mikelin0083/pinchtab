@@ -1,6 +1,6 @@
 {
   "name": "pinchtab",
-  "version": "0.7.6",
+  "version": "0.0.0",
   "description": "Browser control API for AI agents",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -14,10 +14,12 @@
     "lint": "eslint src tests scripts",
     "format": "prettier --write src tests scripts",
     "format:check": "prettier --check src tests scripts",
+    "stage:skills": "node scripts/stage-skills.js",
     "build": "npm run lint && npm run format:check && tsc",
     "test": "node --test 'dist/tests/**/*.test.js'",
     "postinstall": "node scripts/postinstall.js",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "prepack": "npm run stage:skills"
   },
   "files": [
     "dist/src",
