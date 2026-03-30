@@ -127,7 +127,7 @@ Recommended practice:
 pinchtab config init
 ```
 
-You can also generate one from the dashboard Settings page or let `pinchtab security` restore create one if `server.token` is empty.
+The dashboard Settings page does not expose or rotate `server.token`. Use `pinchtab config token` to copy the current token, or let `pinchtab security` restore or create one if `server.token` is empty.
 
 If you are calling the API manually:
 

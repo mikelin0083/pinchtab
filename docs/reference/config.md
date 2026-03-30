@@ -46,6 +46,20 @@ Shows the effective runtime configuration.
 pinchtab config show
 ```
 
+Secret values such as `server.token` remain masked in this output.
+
+### `pinchtab config token`
+
+Copies the configured `server.token` to the system clipboard without printing it
+to stdout.
+
+```bash
+pinchtab config token
+```
+
+If clipboard access is unavailable, the command reports that safely and still
+does not print the token.
+
 ### `pinchtab config path`
 
 Prints the config file path PinchTab will read.

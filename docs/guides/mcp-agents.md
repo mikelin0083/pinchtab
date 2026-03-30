@@ -113,7 +113,7 @@ proc = subprocess.Popen(
 
 For remote servers, use the `--server` flag: `pinchtab --server http://remote:9867 mcp`
 
-`PINCHTAB_TOKEN` can be found in `~/.config/pinchtab/config.yaml` under `server.token`, or by running `pinchtab config show`.
+`PINCHTAB_TOKEN` comes from `server.token` in your PinchTab config file. To copy the current token without printing it to stdout, run `pinchtab config token`.
 
 ## Typical Agent Workflow
 
