@@ -445,3 +445,22 @@ curl -X POST /fingerprint/rotate -H 'Content-Type: application/json' \
 ```bash
 curl /health
 ```
+
+## Agent Sessions
+
+```bash
+# Create agent session (requires bearer/cookie auth)
+curl -X POST /api/sessions -d '{"agentId":"my-agent","label":"dev"}'
+
+# List sessions
+curl /api/sessions
+
+# Get current session (requires Session auth)
+curl -H "Authorization: Session ses_..." /api/sessions/me
+
+# Rotate token
+curl -X POST /api/sessions/{id}/rotate
+
+# Revoke session
+curl -X POST /api/sessions/{id}/revoke
+```

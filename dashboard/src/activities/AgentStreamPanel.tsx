@@ -1,17 +1,21 @@
 import { useLayoutEffect, useRef } from "react";
 import { EmptyState } from "../components/atoms";
+import type { Session } from "../services/api";
 import ActiveFilterBar from "./ActiveFilterBar";
+import SessionDivider from "./SessionDivider";
 import StreamRow from "./StreamRow";
 import type { ActivityFilters, DashboardActivityEvent } from "./types";
 
 interface AgentStreamPanelProps {
   filters: ActivityFilters;
   events: DashboardActivityEvent[];
+  sessions?: Session[];
   summary: string;
   error: string;
   loading: boolean;
   copyTabId?: boolean;
   hideAgentFilter?: boolean;
+  hideSessionFilter?: boolean;
   simplifyMeta?: boolean;
   onClearFilters: () => void;
   onFilterChange: (key: keyof ActivityFilters, value: string) => void;
@@ -20,15 +24,18 @@ interface AgentStreamPanelProps {
 export default function AgentStreamPanel({
   filters,
   events,
+  sessions = [],
   summary,
   error,
   loading,
   copyTabId = false,
   hideAgentFilter = false,
+  hideSessionFilter = false,
   simplifyMeta = false,
   onClearFilters,
   onFilterChange,
 }: AgentStreamPanelProps) {
+  const sessionMap = new Map(sessions.map((s) => [s.id, s]));
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const previousEventCountRef = useRef(0);
@@ -78,6 +85,7 @@ export default function AgentStreamPanel({
       <ActiveFilterBar
         filters={filters}
         hideAgentFilter={hideAgentFilter}
+        hideSessionFilter={hideSessionFilter}
         onClear={onClearFilters}
       />
 
@@ -104,16 +112,30 @@ export default function AgentStreamPanel({
               simplifyMeta ? "flex min-h-full flex-col justify-end py-2" : ""
             }
           >
-            {events.map((event, index) => (
-              <StreamRow
-                key={`${event.requestId || event.timestamp}-${index}`}
-                event={event}
-                copyTabId={copyTabId}
-                hideAgentFilter={hideAgentFilter}
-                simplifyMeta={simplifyMeta}
-                onFilterChange={onFilterChange}
-              />
-            ))}
+            {events.map((event, index) => {
+              const prevSessionId =
+                index > 0 ? events[index - 1].sessionId : undefined;
+              const showDivider =
+                event.sessionId && event.sessionId !== prevSessionId;
+              return (
+                <div key={`${event.requestId || event.timestamp}-${index}`}>
+                  {showDivider && (
+                    <SessionDivider
+                      session={sessionMap.get(event.sessionId || "")}
+                      sessionId={event.sessionId || ""}
+                      timestamp={event.timestamp}
+                    />
+                  )}
+                  <StreamRow
+                    event={event}
+                    copyTabId={copyTabId}
+                    hideAgentFilter={hideAgentFilter}
+                    simplifyMeta={simplifyMeta}
+                    onFilterChange={onFilterChange}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

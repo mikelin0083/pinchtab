@@ -11,10 +11,11 @@ vi.mock("./api", () => ({
 
 vi.mock("../services/api", () => ({
   fetchAllTabs: vi.fn(),
+  fetchSessions: vi.fn(),
 }));
 
 import { fetchActivity } from "./api";
-import { fetchAllTabs } from "../services/api";
+import { fetchSessions, fetchAllTabs } from "../services/api";
 
 describe("ActivityPage", () => {
   beforeEach(() => {
@@ -64,6 +65,7 @@ describe("ActivityPage", () => {
         ],
       },
     });
+    vi.mocked(fetchSessions).mockResolvedValue([]);
     vi.mocked(fetchAllTabs).mockResolvedValue([
       {
         id: "tab_123",

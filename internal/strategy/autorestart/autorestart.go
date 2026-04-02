@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pinchtab/pinchtab/internal/activity"
 	"github.com/pinchtab/pinchtab/internal/bridge"
 	"github.com/pinchtab/pinchtab/internal/config"
 	"github.com/pinchtab/pinchtab/internal/httpx"
@@ -418,6 +419,7 @@ func (s *Strategy) proxyToManaged(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, 503, err)
 		return
 	}
+	activity.EnrichRouteActivity(r)
 	strategy.EnrichForTarget(r, s.orch, target)
 	s.orch.ProxyToTarget(w, r, target+r.URL.Path)
 }

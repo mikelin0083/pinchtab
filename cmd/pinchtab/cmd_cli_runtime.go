@@ -57,6 +57,9 @@ func resolveCLIBase(cfg *config.RuntimeConfig) string {
 }
 
 func resolveCLIToken(cfg *config.RuntimeConfig) string {
+	if sessionToken := os.Getenv("PINCHTAB_SESSION"); sessionToken != "" {
+		return sessionToken
+	}
 	token := cfg.Token
 	if envToken := os.Getenv("PINCHTAB_TOKEN"); envToken != "" {
 		token = envToken

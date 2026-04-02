@@ -1,3 +1,13 @@
+import {
+  IconCamera,
+  IconCompass,
+  IconFileText,
+  IconHandClick,
+  IconKeyboard,
+  IconMessageCircle,
+  IconPointer,
+  IconScreenShare,
+} from "../components/atoms/Icon";
 import { Badge } from "../components/atoms";
 import { activityMethodVariant, activityStatusVariant } from "./helpers";
 import type { ActivityFilters, DashboardActivityEvent } from "./types";
@@ -12,15 +22,16 @@ function formatTime(ts: string): string {
   });
 }
 
-function eventIcon(event: DashboardActivityEvent): string {
-  if (event.channel === "progress") return "💬";
-  if (event.action === "click" || event.action === "dblclick") return "👆";
-  if (event.action === "type") return "⌨️";
-  if (event.action === "hover") return "🖱️";
-  if (event.path.includes("/navigate")) return "🧭";
-  if (event.path.includes("/snapshot")) return "📸";
-  if (event.path.includes("/screencast")) return "🖥️";
-  return "📝";
+function EventIcon({ event }: { event: DashboardActivityEvent }) {
+  if (event.channel === "progress") return <IconMessageCircle />;
+  if (event.action === "click" || event.action === "dblclick")
+    return <IconHandClick />;
+  if (event.action === "type") return <IconKeyboard />;
+  if (event.action === "hover") return <IconPointer />;
+  if (event.path.includes("/navigate")) return <IconCompass />;
+  if (event.path.includes("/snapshot")) return <IconCamera />;
+  if (event.path.includes("/screencast")) return <IconScreenShare />;
+  return <IconFileText />;
 }
 
 function compactId(value: string): string {
@@ -28,6 +39,12 @@ function compactId(value: string): string {
     return value;
   }
   return `${value.slice(0, 4)}…${value.slice(-4)}`;
+}
+
+function isDefaultProfile(name: string | undefined): boolean {
+  if (!name) return true;
+  const lower = name.toLowerCase();
+  return lower === "default" || lower === "chrome-profile";
 }
 
 function quoted(value: string): string {
@@ -65,8 +82,27 @@ function eventSummary(event: DashboardActivityEvent): string {
       return event.ref ? `Type into ${quoted(event.ref)}` : "Type into page";
     case "hover":
       return event.ref ? `Hover ${quoted(event.ref)}` : "Hover on page";
+    case "fill":
+      return event.ref ? `Fill ${quoted(event.ref)}` : "Fill field";
+    case "select":
+      return event.ref ? `Select ${quoted(event.ref)}` : "Select option";
+    case "scroll":
+      return "Scroll page";
+    case "press":
+      return event.ref ? `Press key on ${quoted(event.ref)}` : "Press key";
+    case "wait":
+      return "Wait for condition";
+    case "evaluate":
+      return "Evaluate JavaScript";
+    case "upload":
+      return "Upload file";
+    case "download":
+      return "Download file";
     default:
-      return "Run browser operation";
+      if (event.action) {
+        return `${event.action} ${event.ref ? quoted(event.ref) : ""}`.trim();
+      }
+      return `${event.method} ${event.path}`;
   }
 }
 
@@ -90,7 +126,7 @@ export default function StreamRow({
       <div className="px-4 py-4">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-lg shadow-[0_0_24px_rgb(var(--brand-accent-rgb)/0.08)]">
-            {eventIcon(event)}
+            <EventIcon event={event} />
           </div>
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex flex-wrap items-center gap-2 text-[0.68rem] text-text-muted">
@@ -119,19 +155,11 @@ export default function StreamRow({
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                {event.profileName && (
+                {event.profileName && !isDefaultProfile(event.profileName) && (
                   <FilterPill
                     label={`profile:${event.profileName}`}
                     onClick={() =>
                       onFilterChange("profileName", event.profileName || "")
-                    }
-                  />
-                )}
-                {event.instanceId && (
-                  <FilterPill
-                    label={`instance:${event.instanceId}`}
-                    onClick={() =>
-                      onFilterChange("instanceId", event.instanceId || "")
                     }
                   />
                 )}
@@ -146,7 +174,9 @@ export default function StreamRow({
   return (
     <div className="border-b border-border-subtle/70 px-4 py-3 text-sm transition-colors hover:bg-white/2">
       <div className="flex items-start gap-3">
-        <span className="pt-0.5 text-lg">{eventIcon(event)}</span>
+        <span className="pt-0.5 text-text-muted">
+          <EventIcon event={event} />
+        </span>
         <span className="dashboard-mono w-18 shrink-0 pt-0.5 text-xs text-text-muted">
           {formatTime(event.timestamp)}
         </span>
@@ -175,19 +205,11 @@ export default function StreamRow({
                   onClick={() => onFilterChange("tabId", event.tabId || "")}
                 />
               ))}
-            {event.profileName && (
+            {event.profileName && !isDefaultProfile(event.profileName) && (
               <FilterPill
                 label={`profile:${event.profileName}`}
                 onClick={() =>
                   onFilterChange("profileName", event.profileName || "")
-                }
-              />
-            )}
-            {event.instanceId && (
-              <FilterPill
-                label={`instance:${event.instanceId}`}
-                onClick={() =>
-                  onFilterChange("instanceId", event.instanceId || "")
                 }
               />
             )}
