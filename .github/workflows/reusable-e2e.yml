@@ -66,17 +66,43 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y jq coreutils
+          sudo apt-get install -y jq coreutils curl
+
+      - name: E2E tool diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "suite=${{ inputs.suite }}"
+          for tool in bash docker jq awk sed grep find sort tee head; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "[ok] $tool: $(command -v "$tool")"
+            else
+              echo "[missing] $tool"
+            fi
+          done
+          docker --version || true
+          ${{ steps.compose.outputs.command }} version || true
+          jq --version || true
 
       - name: Run E2E suite
         id: e2e
         run: |
+          set -o pipefail
           set +e
           mkdir -p tests/e2e/results
           rm -f tests/e2e/results/summary*.txt tests/e2e/results/report*.md e2e-output.log
 
           ./dev e2e "${{ inputs.suite }}" 2>&1 | tee e2e-output.log
           EXIT_CODE=${PIPESTATUS[0]}
+
+          if [ "$EXIT_CODE" -eq 127 ]; then
+            echo ""
+            echo "==== E2E failed with exit code 127 (command not found likely) ===="
+            echo "==== command-not-found hints from log ===="
+            grep -nEi 'command not found|No such file or directory' e2e-output.log | tail -50 || true
+            echo "==== log tail ===="
+            tail -n 200 e2e-output.log || true
+          fi
 
           SUMMARY_FILES=$(find tests/e2e/results -maxdepth 1 -type f -name 'summary*.txt' | sort || true)
           if [ -n "$SUMMARY_FILES" ]; then
