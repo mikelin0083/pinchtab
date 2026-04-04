@@ -23,9 +23,60 @@ var scrollViewportCenter = func(ctx context.Context) (float64, float64, error) {
 	return viewport.X, viewport.Y, nil
 }
 
+// submitFormIfButton checks whether the target element is a submit button and,
+// if so, triggers form submission via the submit event (which fires form
+// validators and JS handlers). Falls back to CDP click on failure.
+func submitFormIfButton(ctx context.Context, selector string) (bool, error) {
+	var isSubmit bool
+	err := chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`
+		(function() {
+			var el = document.querySelector(%q);
+			if (!el) return false;
+			var tag = el.tagName.toLowerCase();
+			var type = (el.type || '').toLowerCase();
+			return (tag === 'button' && (type === 'submit' || type === '')) ||
+			       (tag === 'input' && type === 'submit');
+		})()
+	`, selector), &isSubmit))
+	if err != nil || !isSubmit {
+		return false, err
+	}
+	// Dispatch full event chain: focus → click → submit on the form.
+	var submitted bool
+	err = chromedp.Run(ctx, chromedp.Evaluate(fmt.Sprintf(`
+		(function() {
+			var el = document.querySelector(%q);
+			if (!el) return false;
+			el.focus();
+			// Fire synthetic mouse events that Odoo and similar frameworks require.
+			var opts = {bubbles: true, cancelable: true};
+			el.dispatchEvent(new MouseEvent('mousedown', opts));
+			el.dispatchEvent(new MouseEvent('mouseup', opts));
+			el.dispatchEvent(new MouseEvent('click', opts));
+			// Also submit the closest form directly so navigation fires.
+			var form = el.closest('form');
+			if (form) {
+				var ev = new Event('submit', {bubbles: true, cancelable: true});
+				if (form.dispatchEvent(ev)) { form.submit(); }
+			}
+			return true;
+		})()
+	`, selector), &submitted))
+	return submitted, err
+}
+
 func (b *Bridge) actionClick(ctx context.Context, req ActionRequest) (map[string]any, error) {
 	var err error
 	if req.Selector != "" {
+		// For submit buttons, use full event chain + form.submit() to handle
+		// frameworks like Odoo that rely on JS submit handlers (issue #411).
+		submitted, subErr := submitFormIfButton(ctx, req.Selector)
+		if subErr == nil && submitted {
+			if req.WaitNav {
+				_ = chromedp.Run(ctx, chromedp.Sleep(b.Config.WaitNavDelay))
+			}
+			return map[string]any{"clicked": true, "submitted": true}, nil
+		}
 		err = chromedp.Run(ctx, chromedp.Click(req.Selector, chromedp.ByQuery))
 	} else if req.NodeID > 0 {
 		err = ClickByNodeID(ctx, req.NodeID)
