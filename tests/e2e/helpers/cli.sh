@@ -108,7 +108,7 @@ assert_json_field_contains() {
   local needle="$2"
   local desc="${3:-$path contains '$needle'}"
   local actual
-  actual=$(echo "$PT_OUT" | jq -r "$path" 2>/dev/null)
+  actual=$(echo "$PT_OUT" | safe_jq -r "$path" 2>/dev/null)
   if [[ "$actual" == *"$needle"* ]]; then
     echo -e "  ${GREEN}✓${NC} $desc"
     ((ASSERTIONS_PASSED++)) || true
@@ -132,7 +132,7 @@ assert_file_exists() {
 
 config_version_of() {
   local path="$1"
-  jq -r '.configVersion // "none"' "$path"
+  safe_jq -r '.configVersion // "none"' "$path"
 }
 
 assert_config_version() {
@@ -190,7 +190,7 @@ assert_output_not_contains() {
 assert_output_json() {
   local desc="${1:-output is valid JSON}"
 
-  if echo "$PT_OUT" | jq . >/dev/null 2>&1; then
+  if echo "$PT_OUT" | safe_jq . >/dev/null 2>&1; then
     echo -e "  ${GREEN}✓${NC} $desc"
     ((ASSERTIONS_PASSED++)) || true
   else
@@ -205,7 +205,7 @@ assert_json_field() {
   local expected="$2"
   local desc="${3:-$path equals '$expected'}"
   local actual
-  actual=$(echo "$PT_OUT" | jq -r "$path" 2>/dev/null)
+  actual=$(echo "$PT_OUT" | safe_jq -r "$path" 2>/dev/null)
 
   if [ "$actual" = "$expected" ]; then
     echo -e "  ${GREEN}✓${NC} $desc"

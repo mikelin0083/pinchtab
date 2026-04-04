@@ -1,0 +1,50 @@
+package handlers
+
+import (
+	"bytes"
+	"net/http/httptest"
+	"testing"
+	"github.com/pinchtab/pinchtab/internal/config"
+)
+
+func TestHandleStorageDelete_EmptyBody(t *testing.T) {
+	// Setup handlers with a mock bridge
+	m := &mockBridge{}
+	h := New(m, &config.RuntimeConfig{}, nil, nil, nil)
+
+	// Create a DELETE request with NO body
+	req := httptest.NewRequest("DELETE", "/storage", nil)
+	w := httptest.NewRecorder()
+
+	// Direct call to handleStorageDelete (which is unexported but in same package)
+	h.handleStorageDelete(w, req)
+
+	// It should NOT return 400 (EOF)
+	// It might return 404 if the tab isn't found in the mock, but we want to see it pass the decode stage.
+	if w.Code == 400 {
+		t.Fatalf("expected handleStorageDelete to handle empty body, got 400: %s", w.Body.String())
+	}
+	
+	// If it got past decode, it should try to find a tab. 
+	// Our mockBridge return a context for any tabID, so it should proceed to domain check.
+	// We expect 200 if the mock allows it.
+	if w.Code != 200 && w.Code != 404 {
+		t.Errorf("unexpected status code: %d, body: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleStorageDelete_WithBody(t *testing.T) {
+	m := &mockBridge{}
+	h := New(m, &config.RuntimeConfig{}, nil, nil, nil)
+
+	// Valid body
+	body := `{"type": "local", "key": "test"}`
+	req := httptest.NewRequest("DELETE", "/storage", bytes.NewReader([]byte(body)))
+	w := httptest.NewRecorder()
+
+	h.handleStorageDelete(w, req)
+
+	if w.Code == 400 {
+		t.Fatalf("expected handleStorageDelete to handle valid body, got 400: %s", w.Body.String())
+	}
+}

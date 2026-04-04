@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -171,15 +172,26 @@ func (h *Handlers) handleStorageDelete(w http.ResponseWriter, r *http.Request) {
 		Key   string `json:"key"`
 		Type  string `json:"type"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodySize)).Decode(&req); err != nil {
-		httpx.Error(w, 400, fmt.Errorf("decode: %w", err))
+
+	// Read body to check if it's empty (optional for DELETE)
+	bodyBytes, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodySize))
+	if err != nil {
+		httpx.Error(w, 400, fmt.Errorf("read body: %w", err))
 		return
 	}
 
-	if req.Type == "" {
-		httpx.Error(w, 400, fmt.Errorf("type is required (local, session, or all)"))
-		return
+	if len(bodyBytes) > 0 {
+		if err := json.Unmarshal(bodyBytes, &req); err != nil {
+			httpx.Error(w, 400, fmt.Errorf("decode: %w", err))
+			return
+		}
 	}
+
+	// Defaults for empty body/missing type
+	if req.Type == "" {
+		req.Type = "all"
+	}
+
 	if req.Type != "local" && req.Type != "session" && req.Type != "all" {
 		httpx.Error(w, 400, fmt.Errorf("type must be 'local', 'session', or 'all'"))
 		return

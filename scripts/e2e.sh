@@ -27,9 +27,17 @@ show_filter_status() {
   echo "  ${MUTED}filter: none (running all scenarios in this suite)${NC}"
 }
 
+# Detect available docker compose command
+COMPOSE="docker compose"
+if ! command -v docker compose >/dev/null 2>&1; then
+  if command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE="docker-compose"
+  fi
+fi
+
 compose_down() {
   local compose_file="$1"
-  docker compose -f "${compose_file}" down -v 2>/dev/null || true
+  $COMPOSE -f "${compose_file}" down -v 2>/dev/null || true
 }
 
 dump_compose_failure() {
@@ -41,7 +49,7 @@ dump_compose_failure() {
 
   mkdir -p tests/e2e/results
   for service in "${services[@]}"; do
-    docker compose -f "${compose_file}" logs "${service}" > "tests/e2e/results/${log_prefix}-${service}.log" 2>&1 || true
+    $COMPOSE -f "${compose_file}" logs "${service}" > "tests/e2e/results/${log_prefix}-${service}.log" 2>&1 || true
   done
 }
 
@@ -116,9 +124,9 @@ run_api_fast() {
   prepare_suite_results "${summary_file}" "${report_file}" "${progress_file}" "${log_prefix}"
   set +e
   if [ -n "${E2E_FILTER}" ]; then
-    docker compose -f "${compose_file}" run --build --rm runner-api /bin/bash /e2e/run.sh api "filter=${E2E_FILTER}"
+    $COMPOSE -f "${compose_file}" run --build --rm runner-api /bin/bash /e2e/run.sh api "filter=${E2E_FILTER}"
   else
-    docker compose -f "${compose_file}" run --build --rm runner-api /bin/bash /e2e/run.sh api
+    $COMPOSE -f "${compose_file}" run --build --rm runner-api /bin/bash /e2e/run.sh api
   fi
   local api_fast_exit=$?
   set -e
@@ -141,7 +149,7 @@ run_full_api() {
   echo ""
   prepare_suite_results "${summary_file}" "${report_file}" "${progress_file}" "${log_prefix}"
   set +e
-  E2E_SCENARIO_FILTER="${E2E_FILTER}" docker compose -f "${compose_file}" up --build --abort-on-container-exit --exit-code-from runner-api runner-api
+  E2E_SCENARIO_FILTER="${E2E_FILTER}" $COMPOSE -f "${compose_file}" up --build --abort-on-container-exit --exit-code-from runner-api runner-api
   local api_exit=$?
   set -e
   if [ "${api_exit}" -ne 0 ]; then
@@ -165,9 +173,9 @@ run_cli_fast() {
   prepare_suite_results "${summary_file}" "${report_file}" "${progress_file}" "${log_prefix}"
   set +e
   if [ -n "${E2E_FILTER}" ]; then
-    docker compose -f "${compose_file}" run --build --rm runner-cli /bin/bash /e2e/run.sh cli "filter=${E2E_FILTER}"
+    $COMPOSE -f "${compose_file}" run --build --rm runner-cli /bin/bash /e2e/run.sh cli "filter=${E2E_FILTER}"
   else
-    docker compose -f "${compose_file}" run --build --rm runner-cli /bin/bash /e2e/run.sh cli
+    $COMPOSE -f "${compose_file}" run --build --rm runner-cli /bin/bash /e2e/run.sh cli
   fi
   local cli_fast_exit=$?
   set -e
@@ -191,7 +199,7 @@ run_full_cli() {
   build_e2e_cli_binary
   prepare_suite_results "${summary_file}" "${report_file}" "${progress_file}" "${log_prefix}"
   set +e
-  E2E_SCENARIO_FILTER="${E2E_FILTER}" docker compose -f "${compose_file}" up --build --abort-on-container-exit --exit-code-from runner-cli runner-cli
+  E2E_SCENARIO_FILTER="${E2E_FILTER}" $COMPOSE -f "${compose_file}" up --build --abort-on-container-exit --exit-code-from runner-cli runner-cli
   local cli_exit=$?
   set -e
   if [ "${cli_exit}" -ne 0 ]; then
