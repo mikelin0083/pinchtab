@@ -201,32 +201,6 @@ func (s *Store) Revoke(sessionID string) bool {
 	return true
 }
 
-// Rotate invalidates the current token and returns a new one.
-func (s *Store) Rotate(sessionID string) (string, error) {
-	if s == nil {
-		return "", fmt.Errorf("store is nil")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	sess, ok := s.sessions[strings.TrimSpace(sessionID)]
-	if !ok {
-		return "", fmt.Errorf("session not found")
-	}
-	if sess.Status != StatusActive {
-		return "", fmt.Errorf("session is %s", sess.Status)
-	}
-
-	token, err := generateToken()
-	if err != nil {
-		return "", err
-	}
-	sess.TokenHash = hashToken(token)
-	sess.LastSeenAt = s.now()
-	s.saveLocked()
-	return token, nil
-}
-
 // UpdateConfig applies new configuration.
 func (s *Store) UpdateConfig(cfg Config) {
 	if s == nil {

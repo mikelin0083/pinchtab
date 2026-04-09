@@ -99,6 +99,9 @@ func Forward(w http.ResponseWriter, r *http.Request, targetURL *url.URL, opts Op
 
 	copyHeaders(w.Header(), resp.Header)
 
+	// Enrich activity from response headers (always available, regardless of body size).
+	enrichActivityFromHeaders(r, resp.Header)
+
 	// For small JSON responses, buffer to allow OnResponse to inspect the body.
 	if opts.OnResponse != nil && isSmallJSON(resp) {
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
@@ -148,6 +151,16 @@ func HTTP(w http.ResponseWriter, r *http.Request, targetURL string) {
 		parsed.RawQuery = r.URL.RawQuery
 	}
 	Forward(w, r, parsed, Options{})
+}
+
+// enrichActivityFromHeaders extracts tab ID from upstream response headers
+// and enriches the activity event. This works for all response sizes,
+// unlike body-based enrichment which is limited to small JSON responses.
+func enrichActivityFromHeaders(origReq *http.Request, respHeaders http.Header) {
+	tabID := strings.TrimSpace(respHeaders.Get(activity.HeaderPTTabID))
+	if tabID != "" {
+		activity.EnrichRequest(origReq, activity.Update{TabID: tabID})
+	}
 }
 
 func isWebSocketUpgrade(r *http.Request) bool {

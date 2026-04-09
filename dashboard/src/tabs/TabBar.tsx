@@ -6,6 +6,7 @@ interface Props {
   selectedTabId: string | null;
   pinnedTabId?: string | null;
   telemetryActive?: boolean;
+  newTabsCount?: number;
   onSelect: (id: string) => void;
   onTogglePinned?: (id: string) => void;
   onTabClosed?: () => void;
@@ -37,12 +38,15 @@ export default function TabBar({
   selectedTabId,
   pinnedTabId,
   telemetryActive,
+  newTabsCount = 0,
   onSelect,
   onTogglePinned,
   onTabClosed,
   onToggleTelemetry,
   onSetTelemetry,
 }: Props) {
+  const showTabsAttention = newTabsCount > 0;
+
   const handleClose = async (e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
     try {
@@ -53,7 +57,7 @@ export default function TabBar({
     }
   };
   return (
-    <div className="flex min-h-0 items-end gap-px overflow-x-auto border-b border-border-subtle bg-black/10">
+    <div className="flex h-9 items-end gap-px overflow-x-auto border-b border-border-subtle bg-black/10">
       {tabs.map((tab) => {
         const isSelected = tab.id === selectedTabId && !telemetryActive;
         const isPinned = tab.id === pinnedTabId;
@@ -119,7 +123,10 @@ export default function TabBar({
               onSetTelemetry ? onSetTelemetry(false) : onToggleTelemetry?.()
             }
             title="Tabs"
-            className={`shrink-0 rounded p-1.5 transition-colors ${
+            aria-label={
+              showTabsAttention ? `Tabs (${newTabsCount} new)` : "Tabs"
+            }
+            className={`relative shrink-0 rounded p-1.5 transition-colors ${
               !telemetryActive
                 ? "bg-bg-hover text-text-primary"
                 : "text-text-muted hover:bg-white/10 hover:text-text-secondary"
@@ -139,6 +146,12 @@ export default function TabBar({
               <path d="M3 9h18" />
               <path d="M9 3v6" />
             </svg>
+            {showTabsAttention && (
+              <span
+                aria-hidden="true"
+                className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-bg-surface"
+              />
+            )}
           </button>
           <button
             type="button"

@@ -7,6 +7,7 @@ interface Props {
   compact?: boolean;
   sidebarCollapsed?: boolean;
   tabCount?: number;
+  hasRunningInstance?: boolean;
   onToggleSidebar?: () => void;
 }
 
@@ -16,8 +17,23 @@ export default function ServerStatusBadge({
   compact = false,
   sidebarCollapsed = false,
   tabCount = 0,
+  hasRunningInstance = false,
   onToggleSidebar,
 }: Props) {
+  const serverRunning = !!serverInfo && serverInfo.status !== "error";
+
+  if (serverRunning && !hasRunningInstance) {
+    const title = serverInfo.restartRequired
+      ? serverInfo.restartReasons?.join(", ") || "Server running, no instances"
+      : "Server running, no instances";
+
+    return (
+      <div className="mr-2 flex items-center px-2 py-1" title={title}>
+        <div className="h-1.5 w-1.5 rounded-full bg-warning" />
+      </div>
+    );
+  }
+
   if (instance) {
     const statusColor =
       instance.status === "running"
@@ -33,7 +49,6 @@ export default function ServerStatusBadge({
           title={`${instance.profileName} · ${instance.status} · ${instance.port}`}
         >
           <div className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusColor}`} />
-          <span className="text-[10px] tracking-wider">{instance.port}</span>
         </div>
       );
     }

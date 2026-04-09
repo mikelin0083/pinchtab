@@ -131,42 +131,6 @@ func TestRevokeNotFound(t *testing.T) {
 	}
 }
 
-func TestRotate(t *testing.T) {
-	s := NewStore(Config{Enabled: true})
-	id, oldToken, _ := s.Create("agent-1", "")
-
-	newToken, err := s.Rotate(id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if newToken == oldToken {
-		t.Fatal("expected new token to differ from old")
-	}
-
-	// Old token should fail
-	sess, ok := s.Authenticate(oldToken)
-	if ok || sess != nil {
-		t.Fatal("expected old token to fail after rotation")
-	}
-
-	// New token should succeed
-	sess, ok = s.Authenticate(newToken)
-	if !ok || sess == nil {
-		t.Fatal("expected new token to succeed after rotation")
-	}
-}
-
-func TestRotateRevoked(t *testing.T) {
-	s := NewStore(Config{Enabled: true})
-	id, _, _ := s.Create("agent-1", "")
-	s.Revoke(id)
-
-	_, err := s.Rotate(id)
-	if err == nil {
-		t.Fatal("expected rotate to fail on revoked session")
-	}
-}
-
 func TestGet(t *testing.T) {
 	s := NewStore(Config{Enabled: true})
 	id, _, _ := s.Create("agent-1", "my label")

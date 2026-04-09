@@ -13,6 +13,13 @@ interface Props {
   instanceId?: string;
 }
 
+function sameIds(left: string[], right: string[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
+}
+
 export default function InstanceTabsPanel({
   tabs,
   emptyMessage = "No tabs open",
@@ -20,7 +27,10 @@ export default function InstanceTabsPanel({
 }: Props) {
   const [selectedTabId, setSelectedTabId] = useState<string | null>(null);
   const [selectionPinned, setSelectionPinned] = useState(false);
-  const manualTabsRef = useRef(false);
+  const [acknowledgedTabIds, setAcknowledgedTabIds] = useState<string[]>(() =>
+    tabs.map((tab) => tab.id),
+  );
+  const previousInstanceIdRef = useRef(instanceId);
 
   const {
     instances,
@@ -34,6 +44,7 @@ export default function InstanceTabsPanel({
   } = useAppStore();
 
   const memoryEnabled = settings.monitoring?.memoryMetrics ?? false;
+  const currentTabIds = useMemo(() => tabs.map((tab) => tab.id), [tabs]);
 
   const selectedInstance = instances.find((i) => i.id === instanceId);
   const chartInstances = useMemo(
@@ -53,16 +64,11 @@ export default function InstanceTabsPanel({
     if (tabs.length === 0) {
       setSelectedTabId(null);
       setSelectionPinned(false);
-      if (!manualTabsRef.current) {
+      if (!showTelemetry) {
         setShowTelemetry(true);
       }
       return;
     }
-
-    if (showTelemetry && !manualTabsRef.current) {
-      setShowTelemetry(false);
-    }
-    manualTabsRef.current = false;
 
     if (selectionPinned && tabs.some((tab) => tab.id === selectedTabId)) {
       return;
@@ -85,6 +91,32 @@ export default function InstanceTabsPanel({
     () => tabs.find((tab) => tab.id === selectedTabId) ?? null,
     [selectedTabId, tabs],
   );
+  const newTabsCount = useMemo(() => {
+    if (!showTelemetry) {
+      return 0;
+    }
+    const acknowledged = new Set(acknowledgedTabIds);
+    return currentTabIds.reduce(
+      (count, tabId) => count + (acknowledged.has(tabId) ? 0 : 1),
+      0,
+    );
+  }, [acknowledgedTabIds, currentTabIds, showTelemetry]);
+
+  useEffect(() => {
+    if (previousInstanceIdRef.current === instanceId) {
+      return;
+    }
+    previousInstanceIdRef.current = instanceId;
+    setAcknowledgedTabIds(currentTabIds);
+  }, [currentTabIds, instanceId]);
+
+  useEffect(() => {
+    if (!showTelemetry) {
+      setAcknowledgedTabIds((previous) =>
+        sameIds(previous, currentTabIds) ? previous : currentTabIds,
+      );
+    }
+  }, [currentTabIds, showTelemetry]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -93,10 +125,14 @@ export default function InstanceTabsPanel({
         selectedTabId={selectedTabId}
         pinnedTabId={selectionPinned ? selectedTabId : null}
         telemetryActive={showTelemetry}
+        newTabsCount={newTabsCount}
         onSelect={(id) => {
+          setAcknowledgedTabIds(currentTabIds);
           setSelectedTabId(id);
           setSelectionPinned(true);
-          setShowTelemetry(false);
+          if (showTelemetry) {
+            setShowTelemetry(false);
+          }
         }}
         onTogglePinned={(id) => {
           if (selectionPinned && selectedTabId === id) {
@@ -104,13 +140,20 @@ export default function InstanceTabsPanel({
             setSelectedTabId(tabs[0]?.id ?? null);
             return;
           }
+          setAcknowledgedTabIds(currentTabIds);
           setSelectedTabId(id);
           setSelectionPinned(true);
-          setShowTelemetry(false);
+          if (showTelemetry) {
+            setShowTelemetry(false);
+          }
         }}
         onSetTelemetry={(active) => {
-          manualTabsRef.current = !active;
-          setShowTelemetry(active);
+          if (!active) {
+            setAcknowledgedTabIds(currentTabIds);
+          }
+          if (active !== showTelemetry) {
+            setShowTelemetry(active);
+          }
         }}
       />
 

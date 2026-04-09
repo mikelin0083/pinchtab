@@ -189,7 +189,7 @@ export default function ProfilesPage() {
               }
             />
           ) : (
-            <div className="dashboard-panel flex h-full min-h-0 flex-col overflow-hidden rounded-none! lg:flex-row">
+            <div className="dashboard-panel flex h-full min-h-0 flex-col overflow-hidden rounded-none! border-t-0 lg:flex-row">
               <div className="flex max-h-88 w-full shrink-0 flex-col overflow-hidden border-r border-border-subtle bg-bg-surface/50 lg:max-h-none lg:w-80">
                 <div className="flex items-center justify-between border-b border-border-subtle px-4 py-2.5">
                   <span className="text-xs font-medium text-text-muted">

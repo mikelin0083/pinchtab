@@ -43,7 +43,12 @@ export default function NavBar({ onRefresh, showLogout = false }: NavBarProps) {
     "/dashboard/monitoring",
   );
   const selectedInstance =
-    instances.find((i) => i.id === selectedMonitoringInstanceId) ?? null;
+    instances.find((i) => i.id === selectedMonitoringInstanceId) ??
+    instances[0] ??
+    null;
+  const hasRunningInstance = instances.some(
+    (instance) => instance.status === "running",
+  );
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -118,6 +123,7 @@ export default function NavBar({ onRefresh, showLogout = false }: NavBarProps) {
             instance={selectedInstance}
             compact={!isMonitoringPage}
             sidebarCollapsed={monitoringSidebarCollapsed}
+            hasRunningInstance={hasRunningInstance}
             tabCount={
               selectedInstance
                 ? (currentTabs[selectedInstance.id]?.length ?? 0)

@@ -426,7 +426,7 @@ export const useAppStore = create<AppState>((set) => ({
   selectedMonitoringInstanceId: null,
   setSelectedMonitoringInstanceId: (selectedMonitoringInstanceId) =>
     set({ selectedMonitoringInstanceId }),
-  monitoringShowTelemetry: false,
+  monitoringShowTelemetry: true,
   setMonitoringShowTelemetry: (monitoringShowTelemetry) =>
     set({ monitoringShowTelemetry }),
 }));
