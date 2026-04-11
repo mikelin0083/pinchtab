@@ -230,8 +230,8 @@ func startChromeWithRecovery(parentCtx context.Context, cfg *config.RuntimeConfi
 			}
 		}
 
-		if isStartupTimeout(err) && debugPort > 0 {
-			slog.Warn("chrome startup timeout (Chrome 145+ regression), trying direct-launch fallback", "port", debugPort)
+		if shouldRetryChromeStartupWithDirectLaunch(parentCtx, err) && debugPort > 0 {
+			slog.Warn("chrome startup failed via allocator, trying direct-launch fallback", "port", debugPort, "error", errMsg)
 			time.Sleep(500 * time.Millisecond)
 			return startChromeWithRemoteAllocator(parentCtx, cfg, bundle, debugPort, bundle.Script)
 		}
@@ -262,6 +262,19 @@ func isStartupTimeout(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "deadline exceeded") || strings.Contains(msg, "context deadline exceeded")
+}
+
+func shouldRetryChromeStartupWithDirectLaunch(parentCtx context.Context, err error) bool {
+	if isStartupTimeout(err) {
+		return true
+	}
+	if parentCtx != nil && parentCtx.Err() != nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) {
+		return true
+	}
+	return strings.Contains(err.Error(), "context canceled")
 }
 
 func startChromeWithRemoteAllocator(parentCtx context.Context, cfg *config.RuntimeConfig, bundle *stealth.Bundle, debugPort int, injectedStealthScript string) (context.Context, context.CancelFunc, stealth.LaunchMode, error) {
