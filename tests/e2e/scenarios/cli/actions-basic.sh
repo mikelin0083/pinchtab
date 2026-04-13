@@ -33,12 +33,62 @@ start_test "pinchtab hover <ref>"
 
 pt_ok nav "${FIXTURES_URL}/buttons.html"
 pt_ok snap
-REF=$(echo "$PT_OUT" | grep -oE 'e[0-9]+' | head -1)
-if [ -n "$REF" ]; then
+
+# Pick a stable, interactive element ref instead of the first arbitrary ref.
+REF=$(find_ref_by_name "Increment" "$PT_OUT")
+if [ -z "$REF" ] || [ "$REF" = "null" ]; then
+  REF=$(find_ref_by_name "Decrement" "$PT_OUT")
+fi
+if [ -z "$REF" ] || [ "$REF" = "null" ]; then
+  REF=$(find_ref_by_name "Reset" "$PT_OUT")
+fi
+
+if [ -n "$REF" ] && [ "$REF" != "null" ]; then
   pt_ok hover "$REF"
 else
   echo -e "  ${YELLOW}⚠${NC} no ref found, skipping hover"
   ((ASSERTIONS_PASSED++)) || true
+fi
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "pinchtab mouse move/down/up/wheel"
+
+pt_ok nav "${FIXTURES_URL}/mouse-events.html"
+pt_ok snap --interactive
+
+MOUSE_REF=$(find_ref_by_name "Mouse Target" "$PT_OUT")
+if assert_ref_found "$MOUSE_REF" "mouse target ref"; then
+  pt_ok mouse move "$MOUSE_REF"
+  assert_output_contains "moved" "confirms mouse move action"
+
+  pt_ok mouse down "$MOUSE_REF" --button left
+  assert_output_contains "down" "confirms mouse down action"
+
+  pt_ok mouse up "$MOUSE_REF" --button left
+  assert_output_contains "up" "confirms mouse up action"
+
+  pt_ok mouse wheel --x 160 --y 190 --wheel-delta-y 240
+  assert_output_contains "wheel" "confirms mouse wheel action"
+
+  pt_ok eval "window.mouseFixtureState.mousemoveCount"
+  assert_output_jq '.result >= 1' "mousemove count incremented" "mousemove count did not increment"
+
+  pt_ok eval "window.mouseFixtureState.mousedownCount"
+  assert_json_field ".result" "1" "mousedown count is 1"
+
+  pt_ok eval "window.mouseFixtureState.mouseupCount"
+  assert_json_field ".result" "1" "mouseup count is 1"
+
+  pt_ok eval "window.mouseFixtureState.lastButton"
+  assert_json_field ".result" "left" "last button is left"
+
+  pt_ok eval "window.mouseFixtureState.wheelCount"
+  assert_json_field ".result" "1" "wheel count is 1"
+
+  pt_ok eval "window.mouseFixtureState.wheelDeltaY"
+  assert_json_field ".result" "240" "wheel delta Y accumulated"
 fi
 
 end_test
