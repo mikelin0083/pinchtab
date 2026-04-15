@@ -107,25 +107,7 @@ Legacy `ref` field is still accepted for backward compatibility.
 
 ## Command Chaining
 
-Use `&&` only when you do not need to inspect intermediate output before deciding the next step.
-
-Good:
-
-```bash
-pinchtab nav https://pinchtab.com && pinchtab snap -i -c
-pinchtab click --wait-nav e5 && pinchtab snap -i -c
-pinchtab nav https://pinchtab.com --block-images && pinchtab text
-```
-
-Run commands separately when you must read the snapshot output first:
-
-```bash
-pinchtab nav https://pinchtab.com
-pinchtab snap -i -c
-# Read refs, choose the correct e#
-pinchtab click e7
-pinchtab snap -i -c
-```
+Use `&&` when you don't need intermediate output: `pinchtab nav <url> && pinchtab snap -i -c`. Run separately when you must read refs before acting.
 
 ## Challenge Solving
 
@@ -133,17 +115,9 @@ If a page shows a challenge instead of content (e.g., "Just a moment..."), call 
 
 ## Handling Authentication and State
 
-Pick a pattern before interacting with the site:
+Patterns: (1) One-off: `pinchtab instance start` → `--server http://localhost:<port>`. (2) Reuse profile: `pinchtab instance start --profile work --mode headed` → switch to headless after login. (3) HTTP: `POST /profiles`, then `POST /profiles/<name>/start`. (4) Human-assisted: headed login, then agent reuses headless.
 
-1. **One-off browsing**: `pinchtab instance start` → use `--server http://localhost:<port>` for commands.
-2. **Reuse a profile**: `pinchtab instance start --profile work --mode headed` → switch to `--mode headless` after login is stored.
-3. **Create profile via HTTP**: `POST /profiles` with `{"name":"..."}`, then `POST /profiles/<name>/start`.
-4. **Human-assisted login**: Start headed, human signs in, agent reuses the profile headless.
-5. **HTTP-only agent**: Use `POST /instances/start`, then target the instance port with curl. Send `X-Agent-Id` for attribution.
-
-If the server is exposed beyond localhost, require a token. See [TRUST.md](./TRUST.md).
-
-**Agent sessions**: Each agent can get its own revocable session token via `pinchtab session create --agent-id <id>` or `POST /sessions`. Set `PINCHTAB_SESSION=ses_...` or send `Authorization: Session ses_...`. Sessions have idle timeout (default 30m) and max lifetime (default 24h).
+Agent sessions: `pinchtab session create --agent-id <id>` or `POST /sessions` → set `PINCHTAB_SESSION=ses_...`.
 
 ## Essential Commands
 
@@ -383,36 +357,8 @@ curl http://localhost:9867/tabs/TAB_ID/pdf \
 curl -X POST http://localhost:9867/tabs/TAB_ID/close \
   -H "Authorization: Bearer <token>"
 
-# Pause automation for a human-only step
-curl -X POST http://localhost:9867/tabs/TAB_ID/handoff \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"reason":"captcha","timeoutMs":120000}'
-
-# Inspect handoff status
-curl http://localhost:9867/tabs/TAB_ID/handoff \
-  -H "Authorization: Bearer <token>"
-
-# Resume automation after the human step is done
-curl -X POST http://localhost:9867/tabs/TAB_ID/resume \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"status":"completed"}'
-
-```
-
-The default (non-tab-scoped) endpoints also support screenshots and PDF:
-
-```bash
-# Screenshot of active tab (GET)
-curl http://localhost:9867/screenshot \
-  -H "Authorization: Bearer <token>" \
-  --output screenshot.png
-
-# PDF of active tab (GET or POST)
-curl http://localhost:9867/pdf \
-  -H "Authorization: Bearer <token>" \
-  --output page.pdf
+# Handoff for human step: POST /tabs/TAB_ID/handoff with {"reason":"captcha","timeoutMs":120000}
+# Resume: POST /tabs/TAB_ID/resume with {"status":"completed"}
 ```
 
 **Navigation with `waitNav`:** When clicking a link or button that triggers page navigation, include `"waitNav": true` in the action body. Without it, PinchTab returns a `navigation_changed` error to protect against unexpected navigation during form interactions.
@@ -425,54 +371,11 @@ All tab-scoped routes follow the pattern `/tabs/{TAB_ID}/...` and mirror the def
 
 ## Common Patterns
 
-### Open a page and inspect actions
+- **Form flow**: `nav` → `snap -i -c` → `fill` fields → `click --wait-nav` submit → `text` to verify
+- **Multi-step**: After each action, `snap -d -i -c` for diff
+- **Direct selectors**: Skip snapshot when structure is known: `pinchtab click "text:Accept Cookies"` or `fill "#search" "query"`
 
-```bash
-pinchtab nav https://pinchtab.com && pinchtab snap -i -c
-```
-
-### Fill and submit a form
-
-```bash
-pinchtab nav https://example.com/login
-pinchtab snap -i -c
-pinchtab fill e3 "user@example.com"
-pinchtab fill e4 "correct horse battery staple"
-pinchtab click --wait-nav e5
-pinchtab text
-```
-
-### Search, then extract the result page cheaply
-
-```bash
-pinchtab nav https://example.com/search
-pinchtab snap -i -c
-pinchtab fill e2 "quarterly report"
-pinchtab click e3  # Click the Search button
-pinchtab text
-```
-
-**Form submission:** Always click the submit button — never use `press Enter`. Most HTML forms only fire their submission handler on button click, not on Enter keypress.
-
-### Use diff snapshots in a multi-step flow
-
-```bash
-pinchtab nav https://example.com/checkout
-pinchtab snap -i -c
-pinchtab click e8
-pinchtab snap -d -i -c
-```
-
-### Target elements without a snapshot
-
-When you know the page structure, skip the snapshot and use CSS or text selectors directly:
-
-```bash
-pinchtab click "text:Accept Cookies"
-pinchtab fill "#search" "quarterly report"
-pinchtab click "xpath://button[@type='submit']"
-```
-
+**Form submission:** Always click the submit button — never use `press Enter`.
 
 ## Security and Token Economy
 
