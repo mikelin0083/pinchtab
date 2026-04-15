@@ -18,6 +18,7 @@ type RawAXNode = bridgeobserve.RawAXNode
 type RawAXValue = bridgeobserve.RawAXValue
 type RawAXProp = bridgeobserve.RawAXProp
 type RawFrame = bridgeobserve.RawFrame
+type RawFrameTree = bridgeobserve.RawFrameTree
 type rawFrameTree = bridgeobserve.RawFrameTree
 
 type NetworkEntry = bridgeobserve.NetworkEntry
@@ -26,12 +27,20 @@ type NetworkFilter = bridgeobserve.NetworkFilter
 type NetworkMonitor = bridgeobserve.NetworkMonitor
 type MemoryMetrics = bridgeobserve.MemoryMetrics
 
-func frameIDs(tree rawFrameTree) []string {
+func frameIDs(tree RawFrameTree) []string {
 	return bridgeobserve.FrameIDs(tree)
 }
 
-func FrameMap(tree rawFrameTree) map[string]RawFrame {
+func FrameMap(tree RawFrameTree) map[string]RawFrame {
 	return bridgeobserve.FrameMap(tree)
+}
+
+func FrameOwnerMap(ctx context.Context, tree RawFrameTree) map[string]int64 {
+	return bridgeobserve.FrameOwnerMap(ctx, tree)
+}
+
+func FetchFrameTree(ctx context.Context) (RawFrameTree, error) {
+	return bridgeobserve.FetchFrameTree(ctx)
 }
 
 func FetchAXTree(ctx context.Context) ([]RawAXNode, error) {

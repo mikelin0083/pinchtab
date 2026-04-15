@@ -28,6 +28,7 @@ type TabManager struct {
 	tabs       map[string]*TabEntry
 	accessed   map[string]bool
 	snapshots  map[string]*RefCache
+	frameScope map[string]FrameScope
 	onTabSetup TabSetupFunc
 	dialogMgr  *DialogManager
 	logStore   *ConsoleLogStore
@@ -53,6 +54,7 @@ func NewTabManager(browserCtx context.Context, cfg *config.RuntimeConfig, idMgr 
 		tabs:       make(map[string]*TabEntry),
 		accessed:   make(map[string]bool),
 		snapshots:  make(map[string]*RefCache),
+		frameScope: make(map[string]FrameScope),
 		onTabSetup: onTabSetup,
 		logStore:   logStore,
 		executor:   NewTabExecutor(maxParallel),
@@ -563,6 +565,29 @@ func (tm *TabManager) DeleteRefCache(tabID string) {
 	delete(tm.snapshots, tabID)
 }
 
+func (tm *TabManager) GetFrameScope(tabID string) (FrameScope, bool) {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	scope, ok := tm.frameScope[tabID]
+	return scope, ok && scope.Active()
+}
+
+func (tm *TabManager) SetFrameScope(tabID string, scope FrameScope) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	if !scope.Active() {
+		delete(tm.frameScope, tabID)
+		return
+	}
+	tm.frameScope[tabID] = scope
+}
+
+func (tm *TabManager) ClearFrameScope(tabID string) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	delete(tm.frameScope, tabID)
+}
+
 func (tm *TabManager) RegisterTab(tabID string, ctx context.Context) {
 	now := time.Now()
 	tm.mu.Lock()
@@ -656,6 +681,7 @@ func (tm *TabManager) purgeTrackedTabState(tabID, cdpTargetID string) bool {
 	tm.mu.Lock()
 	delete(tm.tabs, resolvedTabID)
 	delete(tm.snapshots, resolvedTabID)
+	delete(tm.frameScope, resolvedTabID)
 	delete(tm.accessed, resolvedTabID)
 	if tm.currentTab == resolvedTabID {
 		tm.currentTab = ""

@@ -130,6 +130,10 @@ POST /tabs/{id}/action
 POST /tabs/{id}/actions
 POST /wait
 POST /tabs/{id}/wait
+GET  /frame
+POST /frame
+GET  /tabs/{id}/frame
+POST /tabs/{id}/frame
 GET  /snapshot
 GET  /tabs/{id}/snapshot
 GET  /text
@@ -139,6 +143,8 @@ POST /tabs/{id}/find
 POST /evaluate
 POST /tabs/{id}/evaluate
 ```
+
+`/evaluate` is intentionally separate from selector frame scope. `GET/POST /frame` only affects selector-based `/snapshot` and `/action` calls, not arbitrary JavaScript evaluation.
 
 Action kinds currently include:
 
@@ -175,6 +181,8 @@ Action targeting fields:
 - `waitNav`
 - `dialogAction` and `dialogText`
 
+Selector lookup is limited to the current frame scope. The default scope is `main`. Use `/frame` or `/tabs/{id}/frame` before selector-based iframe actions. Same-origin iframe scopes are supported; cross-origin iframe descendants are not currently exposed.
+
 Snapshot query parameters:
 
 - `interactive`
@@ -186,6 +194,8 @@ Snapshot query parameters:
 - `format`
 - `noAnimations`
 - `output`
+
+`selector` on `/snapshot` follows the same rule: it only searches the current frame scope. It does not automatically pierce into iframes, and cross-origin iframe descendants are not inlined.
 
 Text query parameters:
 

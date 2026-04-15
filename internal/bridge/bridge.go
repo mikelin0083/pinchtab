@@ -31,10 +31,13 @@ type TabEntry struct {
 }
 
 type RefTarget struct {
-	BackendNodeID int64  `json:"backendNodeId"`
-	FrameID       string `json:"frameId,omitempty"`
-	FrameURL      string `json:"frameUrl,omitempty"`
-	FrameName     string `json:"frameName,omitempty"`
+	BackendNodeID  int64  `json:"backendNodeId"`
+	FrameID        string `json:"frameId,omitempty"`
+	FrameURL       string `json:"frameUrl,omitempty"`
+	FrameName      string `json:"frameName,omitempty"`
+	ChildFrameID   string `json:"childFrameId,omitempty"`
+	ChildFrameURL  string `json:"childFrameUrl,omitempty"`
+	ChildFrameName string `json:"childFrameName,omitempty"`
 }
 
 type RefCache struct {
@@ -67,13 +70,27 @@ func RefTargetsFromNodes(nodes []A11yNode) map[string]RefTarget {
 			continue
 		}
 		targets[node.Ref] = RefTarget{
-			BackendNodeID: node.NodeID,
-			FrameID:       node.FrameID,
-			FrameURL:      node.FrameURL,
-			FrameName:     node.FrameName,
+			BackendNodeID:  node.NodeID,
+			FrameID:        node.FrameID,
+			FrameURL:       node.FrameURL,
+			FrameName:      node.FrameName,
+			ChildFrameID:   node.ChildFrameID,
+			ChildFrameURL:  node.ChildFrameURL,
+			ChildFrameName: node.ChildFrameName,
 		}
 	}
 	return targets
+}
+
+type FrameScope struct {
+	FrameID   string `json:"frameId,omitempty"`
+	FrameURL  string `json:"frameUrl,omitempty"`
+	FrameName string `json:"frameName,omitempty"`
+	OwnerRef  string `json:"ownerRef,omitempty"`
+}
+
+func (s FrameScope) Active() bool {
+	return s.FrameID != ""
 }
 
 type Bridge struct {

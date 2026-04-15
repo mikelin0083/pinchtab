@@ -147,9 +147,9 @@ end_test
 start_test "pinchtab focus <ref>"
 
 pt_ok nav "${FIXTURES_URL}/form.html"
-pt_ok snap
+pt_ok snap --interactive
 
-USERNAME_REF=$(find_ref_by_name "Username:" "$PT_OUT")
+USERNAME_REF=$(find_ref_by_role_and_name "textbox" "Username:" "$PT_OUT")
 if assert_ref_found "$USERNAME_REF" "username input ref"; then
   pt_ok focus "$USERNAME_REF"
   assert_output_contains "focused" "confirms focus action"

@@ -4,10 +4,204 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/chromedp/chromedp"
 	"github.com/pinchtab/pinchtab/internal/selector"
 )
+
+type FrameElementMeta struct {
+	TagName string `json:"tagName"`
+	ID      string `json:"id,omitempty"`
+	Name    string `json:"name,omitempty"`
+	Title   string `json:"title,omitempty"`
+	Src     string `json:"src,omitempty"`
+}
+
+func frameExecutionContextID(ctx context.Context, frameID string) (int64, error) {
+	if frameID == "" {
+		return 0, nil
+	}
+
+	var worldResult json.RawMessage
+	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return chromedp.FromContext(ctx).Target.Execute(ctx, "Page.createIsolatedWorld", map[string]any{
+			"frameId":   frameID,
+			"worldName": "pinchtab-frame-scope",
+		}, &worldResult)
+	}))
+	if err != nil {
+		return 0, fmt.Errorf("create isolated world for frame %q: %w", frameID, err)
+	}
+
+	var resp struct {
+		ExecutionContextID int64 `json:"executionContextId"`
+	}
+	if err := json.Unmarshal(worldResult, &resp); err != nil {
+		return 0, err
+	}
+	if resp.ExecutionContextID == 0 {
+		return 0, fmt.Errorf("frame %q has no execution context", frameID)
+	}
+	return resp.ExecutionContextID, nil
+}
+
+func frameDocumentObjectID(ctx context.Context, frameID string) (string, error) {
+	params := map[string]any{
+		"expression":    "document",
+		"returnByValue": false,
+	}
+	if frameID != "" {
+		execID, err := frameExecutionContextID(ctx, frameID)
+		if err != nil {
+			return "", err
+		}
+		params["contextId"] = execID
+	}
+
+	var docResult json.RawMessage
+	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return chromedp.FromContext(ctx).Target.Execute(ctx, "Runtime.evaluate", params, &docResult)
+	}))
+	if err != nil {
+		return "", fmt.Errorf("resolve document: %w", err)
+	}
+
+	var doc struct {
+		Result struct {
+			ObjectID string `json:"objectId"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(docResult, &doc); err != nil {
+		return "", err
+	}
+	if doc.Result.ObjectID == "" {
+		return "", fmt.Errorf("document object not found")
+	}
+	return doc.Result.ObjectID, nil
+}
+
+func backendNodeIDFromObjectID(ctx context.Context, objectID string) (int64, error) {
+	var nodeResult json.RawMessage
+	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return chromedp.FromContext(ctx).Target.Execute(ctx, "DOM.requestNode", map[string]any{
+			"objectId": objectID,
+		}, &nodeResult)
+	}))
+	if err != nil {
+		return 0, fmt.Errorf("request node: %w", err)
+	}
+
+	var node struct {
+		NodeID int64 `json:"nodeId"`
+	}
+	if err := json.Unmarshal(nodeResult, &node); err != nil {
+		return 0, err
+	}
+	if node.NodeID == 0 {
+		return 0, fmt.Errorf("resolved to an invalid node")
+	}
+
+	var descResult json.RawMessage
+	err = chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return chromedp.FromContext(ctx).Target.Execute(ctx, "DOM.describeNode", map[string]any{
+			"nodeId": node.NodeID,
+		}, &descResult)
+	}))
+	if err != nil {
+		return 0, fmt.Errorf("describe node: %w", err)
+	}
+
+	var desc struct {
+		Node struct {
+			BackendNodeID int64 `json:"backendNodeId"`
+		} `json:"node"`
+	}
+	if err := json.Unmarshal(descResult, &desc); err != nil {
+		return 0, err
+	}
+	if desc.Node.BackendNodeID == 0 {
+		return 0, fmt.Errorf("resolved to an invalid backend node")
+	}
+	return desc.Node.BackendNodeID, nil
+}
+
+func resolveNodeInFrame(ctx context.Context, frameID, functionDeclaration string, args []map[string]any) (int64, error) {
+	docObjectID, err := frameDocumentObjectID(ctx, frameID)
+	if err != nil {
+		return 0, err
+	}
+
+	var callResult json.RawMessage
+	err = chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return chromedp.FromContext(ctx).Target.Execute(ctx, "Runtime.callFunctionOn", map[string]any{
+			"functionDeclaration": functionDeclaration,
+			"objectId":            docObjectID,
+			"arguments":           args,
+			"returnByValue":       false,
+		}, &callResult)
+	}))
+	if err != nil {
+		return 0, err
+	}
+
+	var call struct {
+		Result struct {
+			Type     string `json:"type"`
+			Subtype  string `json:"subtype"`
+			ObjectID string `json:"objectId"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(callResult, &call); err != nil {
+		return 0, err
+	}
+	if call.Result.ObjectID == "" || call.Result.Subtype == "null" || call.Result.Type == "undefined" {
+		return 0, fmt.Errorf("no element found")
+	}
+
+	return backendNodeIDFromObjectID(ctx, call.Result.ObjectID)
+}
+
+func resolveElementMetaInFrame(ctx context.Context, frameID, functionDeclaration string, args []map[string]any) (FrameElementMeta, error) {
+	docObjectID, err := frameDocumentObjectID(ctx, frameID)
+	if err != nil {
+		return FrameElementMeta{}, err
+	}
+
+	var callResult json.RawMessage
+	err = chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		return chromedp.FromContext(ctx).Target.Execute(ctx, "Runtime.callFunctionOn", map[string]any{
+			"functionDeclaration": functionDeclaration,
+			"objectId":            docObjectID,
+			"arguments":           args,
+			"returnByValue":       true,
+		}, &callResult)
+	}))
+	if err != nil {
+		return FrameElementMeta{}, err
+	}
+
+	var call struct {
+		Result struct {
+			Type    string          `json:"type"`
+			Subtype string          `json:"subtype"`
+			Value   json.RawMessage `json:"value"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(callResult, &call); err != nil {
+		return FrameElementMeta{}, err
+	}
+	if call.Result.Subtype == "null" || call.Result.Type == "undefined" || len(call.Result.Value) == 0 || string(call.Result.Value) == "null" {
+		return FrameElementMeta{}, fmt.Errorf("no element found")
+	}
+
+	var meta FrameElementMeta
+	if err := json.Unmarshal(call.Result.Value, &meta); err != nil {
+		return FrameElementMeta{}, err
+	}
+	meta.TagName = strings.ToLower(meta.TagName)
+	return meta, nil
+}
 
 // ResolveXPathToNodeID resolves an XPath expression to a backend node ID
 // using CDP's DOM.performSearch + DOM.getSearchResults.
@@ -90,29 +284,12 @@ func ResolveXPathToNodeID(ctx context.Context, xpath string) (int64, error) {
 // ResolveTextToNodeID finds the first element whose visible text content
 // contains the given string and returns its backend node ID.
 func ResolveTextToNodeID(ctx context.Context, text string) (int64, error) {
+	return ResolveTextToNodeIDInFrame(ctx, "", text)
+}
+
+func ResolveTextToNodeIDInFrame(ctx context.Context, frameID, text string) (int64, error) {
 	var backendNodeID int64
-	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		var docResult json.RawMessage
-		if err := chromedp.FromContext(ctx).Target.Execute(ctx, "Runtime.evaluate", map[string]any{
-			"expression":    "document",
-			"returnByValue": false,
-		}, &docResult); err != nil {
-			return fmt.Errorf("resolve document: %w", err)
-		}
-
-		var doc struct {
-			Result struct {
-				ObjectID string `json:"objectId"`
-			} `json:"result"`
-		}
-		if err := json.Unmarshal(docResult, &doc); err != nil {
-			return err
-		}
-		if doc.Result.ObjectID == "" {
-			return fmt.Errorf("document object not found")
-		}
-
-		const findTextFn = `function(needle) {
+	const findTextFn = `function(needle) {
 			const root = this.body || this.documentElement;
 			if (!root) {
 				return null;
@@ -189,66 +366,12 @@ func ResolveTextToNodeID(ctx context.Context, text string) (int64, error) {
 			return null;
 		}`
 
-		var callResult json.RawMessage
-		if err := chromedp.FromContext(ctx).Target.Execute(ctx, "Runtime.callFunctionOn", map[string]any{
-			"functionDeclaration": findTextFn,
-			"objectId":            doc.Result.ObjectID,
-			"arguments":           []map[string]any{{"value": text}},
-			"returnByValue":       false,
-		}, &callResult); err != nil {
-			return fmt.Errorf("find text node: %w", err)
+	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		nid, err := resolveNodeInFrame(ctx, frameID, findTextFn, []map[string]any{{"value": text}})
+		if err != nil {
+			return fmt.Errorf("text %q not found: %w", text, err)
 		}
-
-		var call struct {
-			Result struct {
-				ObjectID string `json:"objectId"`
-				Subtype  string `json:"subtype"`
-			} `json:"result"`
-		}
-		if err := json.Unmarshal(callResult, &call); err != nil {
-			return err
-		}
-		if call.Result.ObjectID == "" || call.Result.Subtype == "null" {
-			return fmt.Errorf("text %q not found", text)
-		}
-
-		var nodeResult json.RawMessage
-		if err := chromedp.FromContext(ctx).Target.Execute(ctx, "DOM.requestNode", map[string]any{
-			"objectId": call.Result.ObjectID,
-		}, &nodeResult); err != nil {
-			return fmt.Errorf("request node: %w", err)
-		}
-
-		var node struct {
-			NodeID int64 `json:"nodeId"`
-		}
-		if err := json.Unmarshal(nodeResult, &node); err != nil {
-			return err
-		}
-		if node.NodeID == 0 {
-			return fmt.Errorf("text %q resolved to an invalid node", text)
-		}
-
-		var descResult json.RawMessage
-		if err := chromedp.FromContext(ctx).Target.Execute(ctx, "DOM.describeNode", map[string]any{
-			"nodeId": node.NodeID,
-		}, &descResult); err != nil {
-			return fmt.Errorf("describe node: %w", err)
-		}
-
-		var desc struct {
-			Node struct {
-				BackendNodeID int64 `json:"backendNodeId"`
-			} `json:"node"`
-		}
-		if err := json.Unmarshal(descResult, &desc); err != nil {
-			return err
-		}
-		if desc.Node.BackendNodeID == 0 {
-			return fmt.Errorf("text %q resolved to an invalid backend node", text)
-		}
-
-		backendNodeID = desc.Node.BackendNodeID
+		backendNodeID = nid
 		return nil
 	}))
 	return backendNodeID, err
@@ -256,63 +379,133 @@ func ResolveTextToNodeID(ctx context.Context, text string) (int64, error) {
 
 // ResolveCSSToNodeID resolves a CSS selector to a backend node ID.
 func ResolveCSSToNodeID(ctx context.Context, css string) (int64, error) {
+	return ResolveCSSToNodeIDInFrame(ctx, "", css)
+}
+
+func ResolveCSSToNodeIDInFrame(ctx context.Context, frameID, css string) (int64, error) {
+	if frameID == "" {
+		var backendNodeID int64
+		err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			var docResult json.RawMessage
+			if err := chromedp.FromContext(ctx).Target.Execute(ctx, "DOM.getDocument", map[string]any{"depth": 0}, &docResult); err != nil {
+				return fmt.Errorf("get document: %w", err)
+			}
+			var doc struct {
+				Root struct {
+					NodeID int64 `json:"nodeId"`
+				} `json:"root"`
+			}
+			if err := json.Unmarshal(docResult, &doc); err != nil {
+				return err
+			}
+
+			var qResult json.RawMessage
+			if err := chromedp.FromContext(ctx).Target.Execute(ctx, "DOM.querySelector", map[string]any{
+				"nodeId":   doc.Root.NodeID,
+				"selector": css,
+			}, &qResult); err != nil {
+				return fmt.Errorf("querySelector: %w", err)
+			}
+			var qr struct {
+				NodeID int64 `json:"nodeId"`
+			}
+			if err := json.Unmarshal(qResult, &qr); err != nil {
+				return err
+			}
+			if qr.NodeID == 0 {
+				return fmt.Errorf("css %q: no element found", css)
+			}
+
+			var descResult json.RawMessage
+			if err := chromedp.FromContext(ctx).Target.Execute(ctx, "DOM.describeNode", map[string]any{
+				"nodeId": qr.NodeID,
+			}, &descResult); err != nil {
+				return fmt.Errorf("describe node: %w", err)
+			}
+			var desc struct {
+				Node struct {
+					BackendNodeID int64 `json:"backendNodeId"`
+				} `json:"node"`
+			}
+			if err := json.Unmarshal(descResult, &desc); err != nil {
+				return err
+			}
+			backendNodeID = desc.Node.BackendNodeID
+			return nil
+		}))
+		return backendNodeID, err
+	}
+
 	var backendNodeID int64
 	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		var docResult json.RawMessage
-		if err := chromedp.FromContext(ctx).Target.Execute(ctx, "DOM.getDocument", map[string]any{"depth": 0}, &docResult); err != nil {
-			return fmt.Errorf("get document: %w", err)
+		nid, err := resolveNodeInFrame(ctx, frameID, `function(selector) { return this.querySelector(selector); }`, []map[string]any{{"value": css}})
+		if err != nil {
+			return fmt.Errorf("css %q: %w", css, err)
 		}
-		var doc struct {
-			Root struct {
-				NodeID int64 `json:"nodeId"`
-			} `json:"root"`
-		}
-		if err := json.Unmarshal(docResult, &doc); err != nil {
-			return err
-		}
-
-		var qResult json.RawMessage
-		if err := chromedp.FromContext(ctx).Target.Execute(ctx, "DOM.querySelector", map[string]any{
-			"nodeId":   doc.Root.NodeID,
-			"selector": css,
-		}, &qResult); err != nil {
-			return fmt.Errorf("querySelector: %w", err)
-		}
-		var qr struct {
-			NodeID int64 `json:"nodeId"`
-		}
-		if err := json.Unmarshal(qResult, &qr); err != nil {
-			return err
-		}
-		if qr.NodeID == 0 {
-			return fmt.Errorf("css %q: no element found", css)
-		}
-
-		var descResult json.RawMessage
-		if err := chromedp.FromContext(ctx).Target.Execute(ctx, "DOM.describeNode", map[string]any{
-			"nodeId": qr.NodeID,
-		}, &descResult); err != nil {
-			return fmt.Errorf("describe node: %w", err)
-		}
-		var desc struct {
-			Node struct {
-				BackendNodeID int64 `json:"backendNodeId"`
-			} `json:"node"`
-		}
-		if err := json.Unmarshal(descResult, &desc); err != nil {
-			return err
-		}
-		backendNodeID = desc.Node.BackendNodeID
+		backendNodeID = nid
 		return nil
 	}))
 	return backendNodeID, err
 }
 
-// ResolveUnifiedSelector resolves a parsed selector to a backend node ID.
-// For ref selectors, the refCache is consulted. For CSS, XPath, and text
-// selectors, CDP is used directly. Semantic selectors are not resolved here
-// (they require the semantic matcher at a higher layer).
-func ResolveUnifiedSelector(ctx context.Context, sel selector.Selector, refCache *RefCache) (int64, error) {
+func ResolveXPathToNodeIDInFrame(ctx context.Context, frameID, xpath string) (int64, error) {
+	if frameID == "" {
+		return ResolveXPathToNodeID(ctx, xpath)
+	}
+
+	var backendNodeID int64
+	err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+		nid, err := resolveNodeInFrame(ctx, frameID, `function(xpath) {
+			return this.evaluate(xpath, this, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+		}`, []map[string]any{{"value": xpath}})
+		if err != nil {
+			return fmt.Errorf("xpath %q: %w", xpath, err)
+		}
+		backendNodeID = nid
+		return nil
+	}))
+	return backendNodeID, err
+}
+
+func ResolveFrameElementMetaInFrame(ctx context.Context, sel selector.Selector, frameID string) (FrameElementMeta, error) {
+	switch sel.Kind {
+	case selector.KindCSS:
+		return resolveElementMetaInFrame(ctx, frameID, `function(selector) {
+			const el = this.querySelector(selector);
+			if (!el) {
+				return null;
+			}
+			return {
+				tagName: (el.tagName || "").toLowerCase(),
+				id: el.id || "",
+				name: el.getAttribute("name") || "",
+				title: el.getAttribute("title") || "",
+				src: el.src || ""
+			};
+		}`, []map[string]any{{"value": sel.Value}})
+	case selector.KindXPath:
+		return resolveElementMetaInFrame(ctx, frameID, `function(xpath) {
+			const el = this.evaluate(xpath, this, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+			if (!el) {
+				return null;
+			}
+			return {
+				tagName: (el.tagName || "").toLowerCase(),
+				id: el.id || "",
+				name: el.getAttribute && el.getAttribute("name") || "",
+				title: el.getAttribute && el.getAttribute("title") || "",
+				src: el.src || ""
+			};
+		}`, []map[string]any{{"value": sel.Value}})
+	default:
+		return FrameElementMeta{}, fmt.Errorf("frame element metadata requires css or xpath selector")
+	}
+}
+
+// ResolveUnifiedSelectorInFrame resolves a parsed selector to a backend node ID.
+// Ref selectors still use the ref cache directly; non-ref selectors honor the
+// provided frame scope.
+func ResolveUnifiedSelectorInFrame(ctx context.Context, sel selector.Selector, refCache *RefCache, frameID string) (int64, error) {
 	switch sel.Kind {
 	case selector.KindRef:
 		if refCache != nil {
@@ -323,13 +516,13 @@ func ResolveUnifiedSelector(ctx context.Context, sel selector.Selector, refCache
 		return 0, fmt.Errorf("ref %s not found in snapshot cache", sel.Value)
 
 	case selector.KindCSS:
-		return ResolveCSSToNodeID(ctx, sel.Value)
+		return ResolveCSSToNodeIDInFrame(ctx, frameID, sel.Value)
 
 	case selector.KindXPath:
-		return ResolveXPathToNodeID(ctx, sel.Value)
+		return ResolveXPathToNodeIDInFrame(ctx, frameID, sel.Value)
 
 	case selector.KindText:
-		return ResolveTextToNodeID(ctx, sel.Value)
+		return ResolveTextToNodeIDInFrame(ctx, frameID, sel.Value)
 
 	case selector.KindSemantic:
 		return 0, fmt.Errorf("semantic selectors must be resolved at the handler layer via /find")
@@ -337,4 +530,12 @@ func ResolveUnifiedSelector(ctx context.Context, sel selector.Selector, refCache
 	default:
 		return 0, fmt.Errorf("unknown selector kind: %q", sel.Kind)
 	}
+}
+
+// ResolveUnifiedSelector resolves a parsed selector to a backend node ID.
+// For ref selectors, the refCache is consulted. For CSS, XPath, and text
+// selectors, CDP is used directly. Semantic selectors are not resolved here
+// (they require the semantic matcher at a higher layer).
+func ResolveUnifiedSelector(ctx context.Context, sel selector.Selector, refCache *RefCache) (int64, error) {
+	return ResolveUnifiedSelectorInFrame(ctx, sel, refCache, "")
 }

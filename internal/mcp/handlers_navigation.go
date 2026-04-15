@@ -74,6 +74,34 @@ func handleSnapshot(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.
 	}
 }
 
+func handleFrame(c *Client) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, r mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		tabID := optString(r, "tabId")
+		target := optString(r, "target")
+		if strings.TrimSpace(target) == "" {
+			q := url.Values{}
+			if tabID != "" {
+				q.Set("tabId", tabID)
+			}
+			body, code, err := c.Get(ctx, "/frame", q)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			return resultFromBytes(body, code)
+		}
+
+		payload := map[string]any{"target": target}
+		if tabID != "" {
+			payload["tabId"] = tabID
+		}
+		body, code, err := c.Post(ctx, "/frame", payload)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return resultFromBytes(body, code)
+	}
+}
+
 func normalizeSnapshotFormat(v string) (string, error) {
 	format := strings.ToLower(strings.TrimSpace(v))
 	switch format {

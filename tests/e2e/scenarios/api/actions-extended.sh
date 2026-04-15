@@ -195,6 +195,210 @@ require_ref "button" "Pay" PAY_REF && {
 
 end_test
 
+# ─────────────────────────────────────────────────────────────────
+start_test "iframe: frame-scoped selectors support focus hover select check scroll and click"
+
+navigate_fixture "iframe.html"
+fresh_snapshot
+
+pt_get "/snapshot?filter=interactive&selector=%23card-number"
+assert_not_ok "unscoped snapshot selector stays in main frame"
+
+pt_post /frame -d '{"target":"#payment-frame"}'
+assert_ok "set frame scope from iframe selector"
+assert_json_eq "$RESULT" '.scoped' 'true' "frame scope enabled"
+
+pt_get "/snapshot?filter=interactive"
+assert_ok "frame-scoped snapshot"
+assert_json_exists "$RESULT" '.nodes[] | select(.name == "Card number")' "frame snapshot includes card field"
+assert_json_exists "$RESULT" '.nodes[] | select(.name == "Billing country")' "frame snapshot includes select"
+assert_json_exists "$RESULT" '.nodes[] | select(.name == "Save card for later")' "frame snapshot includes checkbox"
+
+pt_post /action -d '{"kind":"focus","selector":"#card-number"}'
+assert_ok "focus selector inside frame"
+pt_post /evaluate -d '{"expression":"(() => { const frame = document.getElementById(\"payment-frame\"); const doc = frame && frame.contentDocument; return doc && doc.activeElement ? doc.activeElement.id : \"\"; })()"}'
+assert_ok "evaluate active element in iframe"
+assert_json_eq "$RESULT" '.result' 'card-number' "focus targeted iframe input"
+
+pt_post /action -d '{"kind":"type","selector":"#card-number","text":"5555444433331111"}'
+assert_ok "type selector inside frame"
+pt_post /evaluate -d '{"expression":"(() => { const frame = document.getElementById(\"payment-frame\"); const doc = frame && frame.contentDocument; const input = doc && doc.getElementById(\"card-number\"); return input ? input.value : \"\"; })()"}'
+assert_ok "evaluate typed card number"
+assert_json_eq "$RESULT" '.result' '5555444433331111' "type persisted in iframe input"
+
+pt_post /action -d '{"kind":"hover","selector":"#hover-target"}'
+assert_ok "hover selector inside frame"
+pt_post /evaluate -d '{"expression":"(() => { const frame = document.getElementById(\"payment-frame\"); const doc = frame && frame.contentDocument; const result = doc && doc.getElementById(\"hover-result\"); return result ? result.textContent : \"\"; })()"}'
+assert_ok "evaluate hover result"
+assert_json_eq "$RESULT" '.result' 'HOVERED_1' "hover handler fired inside iframe"
+
+pt_post /action -d '{"kind":"select","selector":"#billing-country","value":"uk"}'
+assert_ok "select option inside frame"
+pt_post /evaluate -d '{"expression":"(() => { const frame = document.getElementById(\"payment-frame\"); const doc = frame && frame.contentDocument; const select = doc && doc.getElementById(\"billing-country\"); return select ? select.value : \"\"; })()"}'
+assert_ok "evaluate selected country"
+assert_json_eq "$RESULT" '.result' 'uk' "select updated iframe dropdown"
+
+pt_post /action -d '{"kind":"check","selector":"#save-card"}'
+assert_ok "check checkbox inside frame"
+pt_post /evaluate -d '{"expression":"(() => { const frame = document.getElementById(\"payment-frame\"); const doc = frame && frame.contentDocument; const checkbox = doc && doc.getElementById(\"save-card\"); return checkbox ? checkbox.checked : false; })()"}'
+assert_ok "evaluate checked state in iframe"
+assert_json_eq "$RESULT" '.result' 'true' "checkbox checked inside iframe"
+
+pt_post /action -d '{"kind":"uncheck","selector":"#save-card"}'
+assert_ok "uncheck checkbox inside frame"
+pt_post /evaluate -d '{"expression":"(() => { const frame = document.getElementById(\"payment-frame\"); const doc = frame && frame.contentDocument; const checkbox = doc && doc.getElementById(\"save-card\"); return checkbox ? checkbox.checked : true; })()"}'
+assert_ok "evaluate unchecked state in iframe"
+assert_json_eq "$RESULT" '.result' 'false' "checkbox unchecked inside iframe"
+
+pt_post /action -d '{"kind":"scrollintoview","selector":"#deep-target"}'
+assert_ok "scrollintoview selector inside frame"
+pt_post /evaluate -d '{"expression":"(() => { const frame = document.getElementById(\"payment-frame\"); const doc = frame && frame.contentDocument; const scrolling = doc && doc.scrollingElement; return scrolling ? scrolling.scrollTop > 0 : false; })()"}'
+assert_ok "evaluate iframe scroll position"
+assert_json_eq "$RESULT" '.result' 'true' "scrollintoview scrolled iframe document"
+
+pt_post /action -d '{"kind":"click","selector":"#deep-target"}'
+assert_ok "click selector inside frame after scroll"
+pt_post /evaluate -d '{"expression":"(() => { const frame = document.getElementById(\"payment-frame\"); const doc = frame && frame.contentDocument; const result = doc && doc.getElementById(\"scroll-result\"); return result ? result.textContent : \"\"; })()"}'
+assert_ok "evaluate deep target click result"
+assert_json_eq "$RESULT" '.result' 'DEEP_TARGET_CLICKED' "click worked inside frame scope"
+
+pt_post /frame -d '{"target":"main"}'
+assert_ok "reset frame scope to main"
+assert_json_eq "$RESULT" '.scoped' 'false' "frame scope cleared"
+
+pt_get "/snapshot?filter=interactive&selector=%23card-number"
+assert_not_ok "selector stops reaching iframe after frame reset"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "iframe: nested frames require explicit frame hops"
+
+navigate_fixture "nested-iframe.html"
+fresh_snapshot
+
+pt_get "/snapshot?filter=interactive&selector=%23nested-code"
+assert_not_ok "nested selector blocked from main frame"
+
+pt_post /frame -d '{"target":"#outer-frame"}'
+assert_ok "set outer frame scope"
+assert_json_eq "$RESULT" '.scoped' 'true' "outer frame scope enabled"
+
+pt_post /action -d '{"kind":"focus","selector":"#nested-code"}'
+assert_not_ok "inner selector still blocked from outer frame"
+
+pt_post /frame -d '{"target":"#inner-payment-frame"}'
+assert_ok "set inner frame scope from outer frame"
+assert_json_eq "$RESULT" '.frame.frameName' 'inner-payment-frame' "inner frame selected"
+
+pt_post /action -d '{"kind":"type","selector":"#nested-code","text":"nested-123"}'
+assert_ok "type inside nested inner frame"
+
+pt_post /action -d '{"kind":"check","selector":"#nested-consent"}'
+assert_ok "check checkbox inside nested inner frame"
+
+pt_post /action -d '{"kind":"click","selector":"#nested-save"}'
+assert_ok "click inside nested inner frame"
+
+pt_post /evaluate -d '{"expression":"(() => { const outer = document.getElementById(\"outer-frame\"); const outerDoc = outer && outer.contentDocument; const inner = outerDoc && outerDoc.getElementById(\"inner-payment-frame\"); const innerDoc = inner && inner.contentDocument; const result = innerDoc && innerDoc.getElementById(\"nested-result\"); return result ? result.textContent : \"\"; })()"}'
+assert_ok "evaluate nested iframe result"
+assert_json_eq "$RESULT" '.result' 'NESTED_SAVED_nested-123_true' "nested frame actions succeeded"
+
+pt_post /frame -d '{"target":"main"}'
+assert_ok "reset nested frame scope to main"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "iframe: srcdoc frame-scoped selectors work"
+
+navigate_fixture "srcdoc-iframe.html"
+sleep 1
+fresh_snapshot
+
+pt_post /frame -d '{"target":"#srcdoc-payment-frame"}'
+assert_ok "set srcdoc frame scope"
+assert_json_eq "$RESULT" '.scoped' 'true' "srcdoc frame scope enabled"
+
+pt_get "/snapshot?filter=interactive"
+assert_ok "srcdoc frame-scoped snapshot"
+assert_json_exists "$RESULT" '.nodes[] | select(.name == "Srcdoc code")' "srcdoc snapshot includes textbox"
+assert_json_exists "$RESULT" '.nodes[] | select(.name | test("Srcdoc opt-in"))' "srcdoc snapshot includes checkbox"
+
+pt_post /action -d '{"kind":"focus","selector":"#srcdoc-code"}'
+assert_ok "focus selector inside srcdoc frame"
+
+pt_post /action -d '{"kind":"type","selector":"#srcdoc-code","text":"srcdoc-321"}'
+assert_ok "type selector inside srcdoc frame"
+
+pt_post /action -d '{"kind":"check","selector":"#srcdoc-optin"}'
+assert_ok "check selector inside srcdoc frame"
+
+pt_post /evaluate -d '{"expression":"(() => { const frame = document.getElementById(\"srcdoc-payment-frame\"); const doc = frame && frame.contentDocument; const input = doc && doc.getElementById(\"srcdoc-code\"); const checkbox = doc && doc.getElementById(\"srcdoc-optin\"); const active = doc && doc.activeElement; return { value: input ? input.value : \"\", checked: checkbox ? checkbox.checked : false, active: active ? active.id : \"\" }; })()"}'
+assert_ok "evaluate srcdoc iframe state"
+assert_json_eq "$RESULT" '.result.value' 'srcdoc-321' "srcdoc input updated"
+assert_json_eq "$RESULT" '.result.checked' 'true' "srcdoc checkbox updated"
+
+pt_post /frame -d '{"target":"main"}'
+assert_ok "reset srcdoc frame scope to main"
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "iframe: stale refs after rerender require a fresh snapshot"
+
+navigate_fixture "iframe-rerender.html"
+fresh_snapshot
+
+require_ref "textbox" "Legacy field" LEGACY_REF && {
+  pt_post /evaluate -d '{"expression":"window.replaceTestFrame()"}'
+  assert_ok "trigger iframe rerender"
+
+  sleep 1
+
+  pt_post /action -d "{\"kind\":\"fill\",\"ref\":\"${LEGACY_REF}\",\"text\":\"stale\"}"
+  assert_not_ok "stale iframe ref rejected after rerender"
+
+  fresh_snapshot
+  assert_json_not_exists "$RESULT" '.nodes[] | select(.name == "Legacy field")' "legacy field removed after rerender"
+
+  require_ref "textbox" "Fresh field" FRESH_REF && \
+  require_ref "button" "Fresh save" FRESH_SAVE_REF && {
+    pt_post /action -d "{\"kind\":\"fill\",\"ref\":\"${FRESH_REF}\",\"text\":\"fresh-456\"}"
+    assert_ok "fresh iframe ref works after resnapshot"
+
+    pt_post /action -d "{\"kind\":\"click\",\"ref\":\"${FRESH_SAVE_REF}\"}"
+    assert_ok "fresh iframe button click works after resnapshot"
+
+    pt_post /evaluate -d '{"expression":"(() => { const frame = document.getElementById(\"live-frame\"); const doc = frame && frame.contentDocument; const result = doc && doc.getElementById(\"fresh-result\"); return result ? result.textContent : \"\"; })()"}'
+    assert_ok "evaluate rerendered iframe result"
+    assert_json_eq "$RESULT" '.result' 'FRESH_SAVED_fresh-456' "fresh refs work after rerender"
+  }
+}
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "iframe: cross-origin selector scope is not claimed as supported"
+
+navigate_fixture "cross-origin-iframe.html"
+sleep 1
+fresh_snapshot
+
+pt_post /frame -d '{"target":"#cross-origin-frame"}'
+assert_not_ok "cross-origin frame selection is currently unsupported"
+
+pt_get "/snapshot?filter=interactive"
+assert_ok "cross-origin frame-scoped snapshot"
+assert_json_exists "$RESULT" '.nodes[] | select(.name == "cross-origin-frame")' "cross-origin snapshot keeps iframe owner only"
+assert_json_not_exists "$RESULT" '.nodes[] | select(.name == "Cross-origin code")' "cross-origin snapshot does not inline input descendants"
+assert_json_not_exists "$RESULT" '.nodes[] | select(.name == "Cross-origin send")' "cross-origin snapshot does not inline button descendants"
+
+pt_post /action -d '{"kind":"type","selector":"#cross-origin-code","text":"424242"}'
+assert_not_ok "unscoped selector cannot type into cross-origin iframe"
+
+end_test
+
 # Regression test for GitHub issue #236: press action was typing key names
 # as literal text instead of dispatching keyboard events.
 

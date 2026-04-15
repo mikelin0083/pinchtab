@@ -8,9 +8,9 @@ source "${GROUP_DIR}/../../helpers/cli.sh"
 start_test "pinchtab type <ref> <text>"
 
 pt_ok nav "${FIXTURES_URL}/form.html"
-pt_ok snap
+pt_ok snap --interactive
 
-USERNAME_REF=$(find_ref_by_name "Username:" "$PT_OUT")
+USERNAME_REF=$(find_ref_by_role_and_name "textbox" "Username:" "$PT_OUT")
 if assert_ref_found "$USERNAME_REF" "username input ref"; then
   pt_ok type "$USERNAME_REF" "typed-via-ref"
   assert_output_contains "typed" "confirms text was typed"
@@ -53,9 +53,9 @@ end_test
 start_test "pinchtab hover (basic)"
 
 pt_ok nav "${FIXTURES_URL}/form.html"
-pt_ok snap
+pt_ok snap --interactive
 
-HOVER_REF=$(find_ref_by_name "Username:" "$PT_OUT")
+HOVER_REF=$(find_ref_by_role_and_name "textbox" "Username:" "$PT_OUT")
 if assert_ref_found "$HOVER_REF" "username input ref"; then
   pt_ok hover "$HOVER_REF"
 fi

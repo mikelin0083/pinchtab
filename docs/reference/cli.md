@@ -91,6 +91,7 @@ Common commands:
 | `pinchtab nav <url>` | Open a new tab and navigate it |
 | `pinchtab quick <url>` | Navigate and snapshot |
 | `pinchtab snap` | Accessibility snapshot |
+| `pinchtab frame [target\|main]` | Show or set selector frame scope |
 | `pinchtab click <selector>` | Click an element |
 | `pinchtab mouse move <x> <y>` | Move the pointer to coordinates |
 | `pinchtab mouse down [selector]` | Press a mouse button at the current pointer or a fresh target |
@@ -109,6 +110,10 @@ Common commands:
 | `pinchtab errors` | Show browser error logs |
 
 Many browser commands accept `--tab <id>` to target an existing tab instead of the active one.
+
+Selector lookup is explicit by frame. Unscoped selectors stay in the main document unless you set a frame first with `pinchtab frame`. Same-origin iframe scopes are supported; cross-origin iframe descendants are not currently exposed.
+
+`pinchtab eval` is separate from that model and does not inherit current frame scope.
 
 Manual handoff is currently API-only:
 

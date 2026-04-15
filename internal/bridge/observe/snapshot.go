@@ -12,18 +12,21 @@ import (
 )
 
 type A11yNode struct {
-	Ref       string `json:"ref"`
-	Role      string `json:"role"`
-	Name      string `json:"name"`
-	Depth     int    `json:"depth"`
-	Value     string `json:"value,omitempty"`
-	Disabled  bool   `json:"disabled,omitempty"`
-	Focused   bool   `json:"focused,omitempty"`
-	Hidden    bool   `json:"hidden,omitempty"`
-	NodeID    int64  `json:"nodeId,omitempty"`
-	FrameID   string `json:"frameId,omitempty"`
-	FrameURL  string `json:"frameUrl,omitempty"`
-	FrameName string `json:"frameName,omitempty"`
+	Ref            string `json:"ref"`
+	Role           string `json:"role"`
+	Name           string `json:"name"`
+	Depth          int    `json:"depth"`
+	Value          string `json:"value,omitempty"`
+	Disabled       bool   `json:"disabled,omitempty"`
+	Focused        bool   `json:"focused,omitempty"`
+	Hidden         bool   `json:"hidden,omitempty"`
+	NodeID         int64  `json:"nodeId,omitempty"`
+	FrameID        string `json:"frameId,omitempty"`
+	FrameURL       string `json:"frameUrl,omitempty"`
+	FrameName      string `json:"frameName,omitempty"`
+	ChildFrameID   string `json:"childFrameId,omitempty"`
+	ChildFrameURL  string `json:"childFrameUrl,omitempty"`
+	ChildFrameName string `json:"childFrameName,omitempty"`
 }
 
 type RawAXNode struct {
@@ -107,25 +110,33 @@ func FrameOwnerMap(ctx context.Context, tree RawFrameTree) map[string]int64 {
 	return owners
 }
 
-// FetchAXTree returns the merged accessibility tree for the current page and any child frames.
-func FetchAXTree(ctx context.Context) ([]RawAXNode, error) {
+func FetchFrameTree(ctx context.Context) (RawFrameTree, error) {
 	var frameTreeResult json.RawMessage
 	if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		return chromedp.FromContext(ctx).Target.Execute(ctx, "Page.getFrameTree", nil, &frameTreeResult)
 	})); err != nil {
-		return fetchAXTreeForFrame(ctx, "")
+		return RawFrameTree{}, err
 	}
 
 	var frameResp struct {
 		FrameTree RawFrameTree `json:"frameTree"`
 	}
 	if err := json.Unmarshal(frameTreeResult, &frameResp); err != nil {
+		return RawFrameTree{}, err
+	}
+	return frameResp.FrameTree, nil
+}
+
+// FetchAXTree returns the merged accessibility tree for the current page and any child frames.
+func FetchAXTree(ctx context.Context) ([]RawAXNode, error) {
+	frameTree, err := FetchFrameTree(ctx)
+	if err != nil {
 		return fetchAXTreeForFrame(ctx, "")
 	}
 
-	frameMap := FrameMap(frameResp.FrameTree)
-	ownerMap := FrameOwnerMap(ctx, frameResp.FrameTree)
-	ids := FrameIDs(frameResp.FrameTree)
+	frameMap := FrameMap(frameTree)
+	ownerMap := FrameOwnerMap(ctx, frameTree)
+	ids := FrameIDs(frameTree)
 	if len(ids) == 0 {
 		return fetchAXTreeForFrame(ctx, "")
 	}
@@ -232,6 +243,7 @@ func BuildSnapshot(nodes []RawAXNode, filter string, maxDepth int) ([]A11yNode, 
 	backendToAX := make(map[int64]string, len(nodes))
 	frameRoots := make(map[string][]string, 4)
 	frameOwners := make(map[string]int64, 4)
+	ownerToChildFrame := make(map[int64]RawFrame, 4)
 	frameOrder := make([]string, 0, 4)
 	seenFrames := make(map[string]bool, 4)
 
@@ -247,6 +259,11 @@ func BuildSnapshot(nodes []RawAXNode, filter string, maxDepth int) ([]A11yNode, 
 		}
 		if n.FrameOwnerNodeID != 0 && frameOwners[n.FrameID] == 0 {
 			frameOwners[n.FrameID] = n.FrameOwnerNodeID
+			ownerToChildFrame[n.FrameOwnerNodeID] = RawFrame{
+				ID:   n.FrameID,
+				URL:  n.FrameURL,
+				Name: n.FrameName,
+			}
 		}
 		for _, childID := range n.ChildIDs {
 			parentMap[childID] = n.NodeID
@@ -337,6 +354,11 @@ func BuildSnapshot(nodes []RawAXNode, filter string, maxDepth int) ([]A11yNode, 
 			FrameID:   n.FrameID,
 			FrameURL:  n.FrameURL,
 			FrameName: n.FrameName,
+		}
+		if childFrame, ok := ownerToChildFrame[n.BackendDOMNodeID]; ok {
+			entry.ChildFrameID = childFrame.ID
+			entry.ChildFrameURL = childFrame.URL
+			entry.ChildFrameName = childFrame.Name
 		}
 
 		if v := n.Value.String(); v != "" {

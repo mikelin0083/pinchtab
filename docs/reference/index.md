@@ -8,6 +8,7 @@ Note: this index is generated and should be checked against the code when comman
 - [Click](./click.md)
 - [Config](./config.md)
 - [Eval](./eval.md)
+- [Frame](./frame.md)
 - [Fill](./fill.md)
 - [Find](./find.md)
 - [Focus](./focus.md)

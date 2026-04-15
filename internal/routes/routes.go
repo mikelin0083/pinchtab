@@ -52,6 +52,8 @@ var coreEndpoints = []Endpoint{
 
 	// Content extraction
 	{"GET", "/snapshot", "Accessibility snapshot", CapNone, true},
+	{"GET", "/frame", "Get current frame scope", CapNone, true},
+	{"POST", "/frame", "Set current frame scope", CapNone, true},
 	{"GET", "/screenshot", "Page screenshot", CapNone, true},
 	{"GET", "/text", "Extract page text", CapNone, true},
 	{"GET", "/pdf", "Export as PDF (GET)", CapNone, true},

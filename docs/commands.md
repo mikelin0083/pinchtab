@@ -64,7 +64,12 @@ Most element commands accept a unified selector:
 - text selector such as `text:Submit`
 - semantic selector such as `find:login button`
 
+Selector lookup is explicit by frame. Unscoped selectors search only the current frame scope, which defaults to `main`. Use `pinchtab frame ...` before selector-based iframe work. Same-origin iframe scopes are supported; cross-origin iframe descendants are not currently exposed.
+
 ```bash
+pinchtab frame                         # Show current frame scope
+pinchtab frame "#payment-frame"        # Scope selectors to an iframe
+pinchtab frame main                    # Return selector scope to the top document
 pinchtab click [selector]               # Click an element or coordinates with --x/--y
 pinchtab click --css <selector>         # Force CSS selector mode
 pinchtab click --wait-nav <selector>    # Click and wait for navigation
@@ -116,6 +121,8 @@ pinchtab find --explain                 # Include score breakdown
 pinchtab find --ref-only                # Print only the best ref
 pinchtab eval <expression>              # Evaluate JavaScript
 ```
+
+`pinchtab eval` is intentionally not frame-scoped. Current `pinchtab frame` state affects selector-based commands such as `snap`, `click`, `fill`, and `type`, but not arbitrary JavaScript evaluation.
 
 ## Keyboard, Wait, And Diagnostics
 

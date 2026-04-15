@@ -24,6 +24,7 @@ type mockBridge struct {
 	lastConsoleLimit int
 	lastErrorLimit   int
 	fingerprintTabs  map[string]bool
+	frameScopes      map[string]bridge.FrameScope
 }
 
 func (m *mockBridge) TabContext(tabID string) (context.Context, string, error) {
@@ -121,6 +122,25 @@ func (m *mockBridge) ClearErrorLogs(tabID string) {}
 
 func (m *mockBridge) Execute(ctx context.Context, tabID string, task func(ctx context.Context) error) error {
 	return task(ctx)
+}
+
+func (m *mockBridge) GetFrameScope(tabID string) (bridge.FrameScope, bool) {
+	if m.frameScopes == nil {
+		return bridge.FrameScope{}, false
+	}
+	scope, ok := m.frameScopes[tabID]
+	return scope, ok && scope.Active()
+}
+
+func (m *mockBridge) SetFrameScope(tabID string, scope bridge.FrameScope) {
+	if m.frameScopes == nil {
+		m.frameScopes = make(map[string]bridge.FrameScope)
+	}
+	m.frameScopes[tabID] = scope
+}
+
+func (m *mockBridge) ClearFrameScope(tabID string) {
+	delete(m.frameScopes, tabID)
 }
 
 func (m *mockBridge) SetFingerprintRotateActive(tabID string, active bool) {

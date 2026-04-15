@@ -19,7 +19,10 @@ pinchtab select e12 it
 
 The `value` should match the option value expected by the page. The raw action endpoint accepts `ref` or `selector`, and the CLI accepts the same unified selector forms as the other action commands.
 
+Selector lookup is limited to the current frame scope. The default scope is `main`; use [`/frame`](./frame.md) or `pinchtab frame` before selector-based iframe selects.
+
 ## Related Pages
 
+- [Frame](./frame.md)
 - [Snapshot](./snapshot.md)
 - [Focus](./focus.md)

@@ -31,6 +31,10 @@ func resolveOwner(r *http.Request, fallback string) string {
 	return strings.TrimSpace(fallback)
 }
 
+func frameScopedSelectorError(kind string, err error) error {
+	return fmt.Errorf("%s in current frame: %w", kind, err)
+}
+
 func (h *Handlers) enforceTabLease(tabID, owner string) error {
 	if tabID == "" {
 		return nil
@@ -192,25 +196,27 @@ func (h *Handlers) HandleAction(w http.ResponseWriter, r *http.Request) {
 				refMissing = true
 			}
 		case selector.KindCSS:
-			// CSS selectors are resolved by the bridge action handlers directly
-			// via chromedp, so we keep req.Selector as-is (the bridge checks
-			// req.Selector before req.NodeID). Clear Ref so the bridge doesn't
-			// confuse it with a snapshot ref.
 			req.Ref = ""
-			req.Selector = sel.Value
-		case selector.KindXPath:
-			nid, err := bridge.ResolveXPathToNodeID(tCtx, sel.Value)
+			nid, err := bridge.ResolveCSSToNodeIDInFrame(tCtx, h.selectorFrameID(resolvedTabID), sel.Value)
 			if err != nil {
-				httpx.Error(w, 400, fmt.Errorf("xpath selector: %w", err))
+				httpx.Error(w, 400, frameScopedSelectorError("css selector", err))
+				return
+			}
+			req.NodeID = nid
+			req.Selector = ""
+		case selector.KindXPath:
+			nid, err := bridge.ResolveXPathToNodeIDInFrame(tCtx, h.selectorFrameID(resolvedTabID), sel.Value)
+			if err != nil {
+				httpx.Error(w, 400, frameScopedSelectorError("xpath selector", err))
 				return
 			}
 			req.NodeID = nid
 			req.Selector = ""
 			req.Ref = ""
 		case selector.KindText:
-			nid, err := bridge.ResolveTextToNodeID(tCtx, sel.Value)
+			nid, err := bridge.ResolveTextToNodeIDInFrame(tCtx, h.selectorFrameID(resolvedTabID), sel.Value)
 			if err != nil {
-				httpx.Error(w, 400, fmt.Errorf("text selector: %w", err))
+				httpx.Error(w, 400, frameScopedSelectorError("text selector", err))
 				return
 			}
 			req.NodeID = nid
@@ -544,14 +550,27 @@ func (h *Handlers) handleActionsBatch(w http.ResponseWriter, r *http.Request, re
 				}
 			case selector.KindCSS:
 				action.Ref = ""
-				action.Selector = sel.Value
-			case selector.KindXPath:
-				nid, resolveErr := bridge.ResolveXPathToNodeID(tCtx, sel.Value)
+				nid, resolveErr := bridge.ResolveCSSToNodeIDInFrame(tCtx, h.selectorFrameID(resolvedTabID), sel.Value)
 				if resolveErr != nil {
 					tCancel()
 					results = append(results, actionResult{
 						Index: i, Success: false,
-						Error: fmt.Sprintf("xpath selector: %v", resolveErr),
+						Error: frameScopedSelectorError("css selector", resolveErr).Error(),
+					})
+					if req.StopOnError {
+						break
+					}
+					continue
+				}
+				action.NodeID = nid
+				action.Selector = ""
+			case selector.KindXPath:
+				nid, resolveErr := bridge.ResolveXPathToNodeIDInFrame(tCtx, h.selectorFrameID(resolvedTabID), sel.Value)
+				if resolveErr != nil {
+					tCancel()
+					results = append(results, actionResult{
+						Index: i, Success: false,
+						Error: frameScopedSelectorError("xpath selector", resolveErr).Error(),
 					})
 					if req.StopOnError {
 						break
@@ -562,12 +581,12 @@ func (h *Handlers) handleActionsBatch(w http.ResponseWriter, r *http.Request, re
 				action.Selector = ""
 				action.Ref = ""
 			case selector.KindText:
-				nid, resolveErr := bridge.ResolveTextToNodeID(tCtx, sel.Value)
+				nid, resolveErr := bridge.ResolveTextToNodeIDInFrame(tCtx, h.selectorFrameID(resolvedTabID), sel.Value)
 				if resolveErr != nil {
 					tCancel()
 					results = append(results, actionResult{
 						Index: i, Success: false,
-						Error: fmt.Sprintf("text selector: %v", resolveErr),
+						Error: frameScopedSelectorError("text selector", resolveErr).Error(),
 					})
 					if req.StopOnError {
 						break
@@ -823,15 +842,29 @@ func (h *Handlers) HandleMacro(w http.ResponseWriter, r *http.Request) {
 				}
 			case selector.KindCSS:
 				step.Ref = ""
-				step.Selector = sel.Value
-			case selector.KindXPath:
 				tCtx, cancel := context.WithTimeout(ctx, stepTimeout)
-				nid, resolveErr := bridge.ResolveXPathToNodeID(tCtx, sel.Value)
+				nid, resolveErr := bridge.ResolveCSSToNodeIDInFrame(tCtx, h.selectorFrameID(resolvedTabID), sel.Value)
 				cancel()
 				if resolveErr != nil {
 					results = append(results, actionResult{
 						Index: i, Success: false,
-						Error: fmt.Sprintf("xpath selector: %v", resolveErr),
+						Error: frameScopedSelectorError("css selector", resolveErr).Error(),
+					})
+					if req.StopOnError {
+						break
+					}
+					continue
+				}
+				step.NodeID = nid
+				step.Selector = ""
+			case selector.KindXPath:
+				tCtx, cancel := context.WithTimeout(ctx, stepTimeout)
+				nid, resolveErr := bridge.ResolveXPathToNodeIDInFrame(tCtx, h.selectorFrameID(resolvedTabID), sel.Value)
+				cancel()
+				if resolveErr != nil {
+					results = append(results, actionResult{
+						Index: i, Success: false,
+						Error: frameScopedSelectorError("xpath selector", resolveErr).Error(),
 					})
 					if req.StopOnError {
 						break
@@ -843,12 +876,12 @@ func (h *Handlers) HandleMacro(w http.ResponseWriter, r *http.Request) {
 				step.Ref = ""
 			case selector.KindText:
 				tCtx, cancel := context.WithTimeout(ctx, stepTimeout)
-				nid, resolveErr := bridge.ResolveTextToNodeID(tCtx, sel.Value)
+				nid, resolveErr := bridge.ResolveTextToNodeIDInFrame(tCtx, h.selectorFrameID(resolvedTabID), sel.Value)
 				cancel()
 				if resolveErr != nil {
 					results = append(results, actionResult{
 						Index: i, Success: false,
-						Error: fmt.Sprintf("text selector: %v", resolveErr),
+						Error: frameScopedSelectorError("text selector", resolveErr).Error(),
 					})
 					if req.StopOnError {
 						break

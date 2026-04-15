@@ -74,11 +74,14 @@ func TestRefCacheLookup(t *testing.T) {
 func TestRefTargetsFromNodes(t *testing.T) {
 	nodes := []A11yNode{
 		{
-			Ref:       "e0",
-			NodeID:    100,
-			FrameID:   "frame-1",
-			FrameURL:  "https://example.com/embed",
-			FrameName: "embed",
+			Ref:            "e0",
+			NodeID:         100,
+			FrameID:        "frame-1",
+			FrameURL:       "https://example.com/embed",
+			FrameName:      "embed",
+			ChildFrameID:   "frame-1-child",
+			ChildFrameURL:  "https://example.com/embed/child",
+			ChildFrameName: "nested",
 		},
 		{
 			Ref:    "e1",
@@ -95,6 +98,9 @@ func TestRefTargetsFromNodes(t *testing.T) {
 	}
 	if targets["e0"].FrameID != "frame-1" {
 		t.Fatalf("e0 frame id = %q", targets["e0"].FrameID)
+	}
+	if targets["e0"].ChildFrameID != "frame-1-child" {
+		t.Fatalf("e0 child frame id = %q", targets["e0"].ChildFrameID)
 	}
 	if targets["e1"].BackendNodeID != 200 {
 		t.Fatalf("e1 backend node = %d", targets["e1"].BackendNodeID)

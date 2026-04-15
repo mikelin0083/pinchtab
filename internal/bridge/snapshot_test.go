@@ -374,6 +374,8 @@ func TestBuildSnapshotNestsFrameContentUnderOwner(t *testing.T) {
 			ChildIDs:         []string{"card", "pay"},
 			BackendDOMNodeID: 11,
 			FrameID:          "child",
+			FrameURL:         "https://payments.example/frame",
+			FrameName:        "payment-frame",
 			FrameOwnerNodeID: 10,
 		},
 		{
@@ -382,6 +384,8 @@ func TestBuildSnapshotNestsFrameContentUnderOwner(t *testing.T) {
 			Name:             &RawAXValue{Value: json.RawMessage(`"Card number"`)},
 			BackendDOMNodeID: 12,
 			FrameID:          "child",
+			FrameURL:         "https://payments.example/frame",
+			FrameName:        "payment-frame",
 			FrameOwnerNodeID: 10,
 		},
 		{
@@ -390,6 +394,8 @@ func TestBuildSnapshotNestsFrameContentUnderOwner(t *testing.T) {
 			Name:             &RawAXValue{Value: json.RawMessage(`"Pay"`)},
 			BackendDOMNodeID: 13,
 			FrameID:          "child",
+			FrameURL:         "https://payments.example/frame",
+			FrameName:        "payment-frame",
 			FrameOwnerNodeID: 10,
 		},
 	}
@@ -400,6 +406,9 @@ func TestBuildSnapshotNestsFrameContentUnderOwner(t *testing.T) {
 	}
 	if flat[1].Name != "payment-frame" {
 		t.Fatalf("second node = %q, want iframe owner", flat[1].Name)
+	}
+	if flat[1].ChildFrameID != "child" {
+		t.Fatalf("iframe child frame id = %q, want child", flat[1].ChildFrameID)
 	}
 	if flat[2].Name != "Card number" || flat[2].Depth != 2 {
 		t.Fatalf("textbox = %+v, want nested child at depth 2", flat[2])

@@ -402,12 +402,12 @@ Download `http://fixtures/download-sample.txt` to a local file.
 ## Group 19: iFrame
 
 ### 19.1 Read iframe content
-Navigate to `http://fixtures/iframe.html` and extract content from inside the embedded iframe.
+Navigate to `http://fixtures/iframe.html` and extract content from inside the embedded same-origin iframe.
 
 **Verify**: The iframe's inner content includes `IFRAME_INNER_CONTENT_LOADED`.
 
 ### 19.2 Type into iframe input
-Inside the iframe, fill the input with the text "Hello World" and click the Save button.
+Inside the same-origin iframe, fill the input with the text "Hello World" and click the Save button. If using selectors, set frame scope first.
 
 **Verify**: The iframe shows `IFRAME_INPUT_RECEIVED_HELLO_WORLD`.
 

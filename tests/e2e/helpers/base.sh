@@ -161,6 +161,13 @@ find_ref_by_name() {
   echo "$json" | safe_jq -r "[.nodes[] | select(.name == \"$name\") | .ref] | first // empty"
 }
 
+find_ref_by_role_and_name() {
+  local role="$1"
+  local name="$2"
+  local json="${3:-$(_e2e_default_ref_json)}"
+  echo "$json" | safe_jq -r "[.nodes[] | select(.role == \"$role\" and .name == \"$name\") | .ref] | first // empty"
+}
+
 assert_ref_found() {
   local ref="$1"
   local desc="${2:-ref}"

@@ -96,6 +96,47 @@ func TestHandleSnapshot(t *testing.T) {
 	}
 }
 
+func TestHandleFrameGet(t *testing.T) {
+	srv := mockPinchTab()
+	defer srv.Close()
+
+	r := callTool(t, "pinchtab_frame", map[string]any{
+		"tabId": "t1",
+	}, srv)
+
+	text := resultText(t, r)
+	if !strings.Contains(text, "/frame") {
+		t.Errorf("expected /frame path, got %s", text)
+	}
+	resp := resultJSON(t, r)
+	if got, _ := resp["method"].(string); got != "GET" {
+		t.Errorf("method = %q, want GET", got)
+	}
+}
+
+func TestHandleFrameSet(t *testing.T) {
+	srv := mockPinchTab()
+	defer srv.Close()
+
+	r := callTool(t, "pinchtab_frame", map[string]any{
+		"tabId":  "t1",
+		"target": "main",
+	}, srv)
+
+	text := resultText(t, r)
+	if !strings.Contains(text, "/frame") {
+		t.Errorf("expected /frame path, got %s", text)
+	}
+	resp := resultJSON(t, r)
+	if got, _ := resp["method"].(string); got != "POST" {
+		t.Errorf("method = %q, want POST", got)
+	}
+	body, _ := resp["body"].(map[string]any)
+	if got, _ := body["target"].(string); got != "main" {
+		t.Errorf("target = %q, want main", got)
+	}
+}
+
 func TestHandleSnapshotFormatText(t *testing.T) {
 	srv := mockPinchTab()
 	defer srv.Close()
