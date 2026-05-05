@@ -145,7 +145,7 @@ func (b *Bridge) actionClick(ctx context.Context, req ActionRequest) (map[string
 			// JS submit handlers, and actual submission in one shot (issue #411).
 			submitted, subErr := submitFormIfButton(clickCtx, req.Selector)
 			if subErr != nil {
-				slog.Debug("submitFormIfButton failed, falling back to CDP click",
+				slog.Debug("submitFormIfButton failed, falling back to JS click",
 					"selector", req.Selector, "error", subErr)
 			} else if submitted {
 				resultCh <- clickResult{err: nil}
@@ -156,9 +156,9 @@ func (b *Bridge) actionClick(ctx context.Context, req ActionRequest) (map[string
 				resultCh <- clickResult{err: nodeErr}
 				return
 			}
-			err = ClickByNodeID(clickCtx, int64(node.BackendNodeID))
+			err = JSClickByBackendNode(clickCtx, int64(node.BackendNodeID))
 		} else if req.NodeID > 0 {
-			err = ClickByNodeID(clickCtx, req.NodeID)
+			err = JSClickByBackendNode(clickCtx, req.NodeID)
 		} else if req.HasXY {
 			err = ClickByCoordinate(clickCtx, req.X, req.Y)
 		} else {
@@ -240,9 +240,9 @@ func (b *Bridge) actionDoubleClick(ctx context.Context, req ActionRequest) (map[
 		if nodeErr != nil {
 			return nil, nodeErr
 		}
-		err = DoubleClickByNodeID(ctx, int64(node.BackendNodeID))
+		err = JSDoubleClickByBackendNode(ctx, int64(node.BackendNodeID))
 	} else if req.NodeID > 0 {
-		err = DoubleClickByNodeID(ctx, req.NodeID)
+		err = JSDoubleClickByBackendNode(ctx, req.NodeID)
 	} else if req.HasXY {
 		err = DoubleClickByCoordinate(ctx, req.X, req.Y)
 	} else {
