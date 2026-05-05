@@ -1,7 +1,7 @@
 import type { PluginConfig } from "../types.js";
 import { pinchtabFetch, textResult, imageResult, resourceResult, normalizeActionParams, looksLikeStaleRef } from "../client.js";
 import { checkNavigationPolicy, checkEvaluatePolicy, checkDownloadPolicy, checkUploadPolicy, checkNetworkInterceptPolicy, enforcePolicyOrReturn } from "../policy.js";
-import { ensureServerRunning, getEnhancedHealth, getLastTabId, setLastTabId } from "../session.js";
+import { ensureServerRunning, waitForInstanceReady, getEnhancedHealth, getLastTabId, setLastTabId } from "../session.js";
 
 export const pinchtabToolSchema = {
   type: "object",
@@ -100,6 +100,10 @@ export async function executePinchtabAction(cfg: PluginConfig, params: any): Pro
     if (!serverCheck.ok) {
       return textResult({ error: serverCheck.error });
     }
+    const readyCheck = await waitForInstanceReady(cfg);
+    if (!readyCheck.ok) {
+      return textResult({ error: readyCheck.error });
+    }
   }
 
   // Session tab persistence
@@ -118,12 +122,23 @@ export async function executePinchtabAction(cfg: PluginConfig, params: any): Pro
     const navPolicy = enforcePolicyOrReturn(checkNavigationPolicy(cfg, normalized.url));
     if (navPolicy) return navPolicy;
 
-    const body: any = { url: normalized.url };
-    if (normalized.tabId) body.tabId = normalized.tabId;
-    if (normalized.newTab) body.newTab = true;
-    if (normalized.blockImages) body.blockImages = true;
-    if (normalized.timeout) body.timeout = normalized.timeout;
-    const result = await pinchtabFetch(cfg, "/navigate", { body });
+    let result;
+    if (normalized.newTab) {
+      const body: any = { action: "new", url: normalized.url };
+      if (normalized.blockImages) body.blockImages = true;
+      if (normalized.timeout) body.timeout = normalized.timeout;
+      result = await pinchtabFetch(cfg, "/tab", { body });
+    } else if (normalized.tabId) {
+      const body: any = { url: normalized.url };
+      if (normalized.blockImages) body.blockImages = true;
+      if (normalized.timeout) body.timeout = normalized.timeout;
+      result = await pinchtabFetch(cfg, `/tabs/${encodeURIComponent(normalized.tabId)}/navigate`, { body });
+    } else {
+      const body: any = { url: normalized.url };
+      if (normalized.blockImages) body.blockImages = true;
+      if (normalized.timeout) body.timeout = normalized.timeout;
+      result = await pinchtabFetch(cfg, "/navigate", { body });
+    }
     if (result?.tabId) setLastTabId(result.tabId);
     return textResult(result);
   }

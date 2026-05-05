@@ -6,9 +6,6 @@ export interface PluginConfig {
   timeoutMs?: number;
   /** @deprecated Use timeoutMs instead */
   timeout?: number;
-  autoStart?: boolean;
-  binaryPath?: string;
-  startupTimeoutMs?: number;
   allowEvaluate?: boolean;
   allowedDomains?: string[];
   allowDownloads?: boolean;

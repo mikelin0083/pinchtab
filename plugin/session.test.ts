@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert";
-import { getLastTabId, setLastTabId, resolveProfile, isLocalHost } from "./session.ts";
+import { getLastTabId, setLastTabId, resolveProfile, isLocalHost, formatDiscoveredBaseUrl } from "./session.ts";
 
 describe("tab session state", () => {
   beforeEach(() => {
@@ -91,5 +91,17 @@ describe("isLocalHost", () => {
   it("returns false for invalid URLs", () => {
     assert.strictEqual(isLocalHost("not-a-url"), false);
     assert.strictEqual(isLocalHost(""), false);
+  });
+});
+
+
+describe("formatDiscoveredBaseUrl", () => {
+  it("brackets IPv6 loopback binds", () => {
+    assert.strictEqual(formatDiscoveredBaseUrl("::1", 9867), "http://[::1]:9867");
+  });
+
+  it("normalizes wildcard binds to local loopback", () => {
+    assert.strictEqual(formatDiscoveredBaseUrl("0.0.0.0", 9867), "http://127.0.0.1:9867");
+    assert.strictEqual(formatDiscoveredBaseUrl("::", 9867), "http://[::1]:9867");
   });
 });

@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import type { AnyAgentTool, OpenClawPluginApi, PluginLogger, PluginRuntime } from "openclaw/plugin-sdk";
-import register from "./index.ts";
+import pluginEntry from "./index.ts";
 
 type RegisteredToolOptions = Parameters<OpenClawPluginApi["registerTool"]>[1];
 type TestPluginApiInput = Partial<OpenClawPluginApi>;
@@ -107,7 +107,7 @@ describe("OpenClaw plugin API contract", () => {
       },
     });
 
-    register(api);
+    pluginEntry.register(api);
 
     assert.deepStrictEqual(
       registered.map(({ tool }) => tool.name).sort(),
@@ -118,7 +118,7 @@ describe("OpenClaw plugin API contract", () => {
       assert.strictEqual(typeof tool.description, "string");
       assert.strictEqual(typeof tool.execute, "function");
       assert.strictEqual((tool.parameters as { type?: string }).type, "object");
-      assert.strictEqual(opts?.optional, true);
+      assert.strictEqual(opts, undefined);
     }
   });
 
@@ -134,7 +134,7 @@ describe("OpenClaw plugin API contract", () => {
       },
     });
 
-    register(api);
+    pluginEntry.register(api);
 
     assert.deepStrictEqual(names, ["pinchtab"]);
   });

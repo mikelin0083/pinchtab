@@ -1,9 +1,27 @@
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { PluginConfig } from "./types.js";
 import { pinchtabFetch } from "./client.js";
 
-let serverStarted = false;
+const instanceReadyRetryDelayMs = 500;
+const instanceReadyMaxWaitMs = 12000;
+
 let lastTabId: string | undefined;
-let startupPromise: Promise<{ ok: boolean; error?: string; autoStarted?: boolean }> | null = null;
+let discoveredConfig: { baseUrl?: string; token?: string } | null | undefined;
+
+export function normalizeDiscoveredHost(bind: string): string {
+  if (bind === "0.0.0.0") return "127.0.0.1";
+  if (bind === "::") return "::1";
+  return bind;
+}
+
+export function formatHostForUrl(host: string): string {
+  if (host.includes(":") && !host.startsWith("[") && !host.endsWith("]")) {
+    return `[${host}]`;
+  }
+  return host;
+}
 
 export function isLocalHost(baseUrl: string): boolean {
   try {
@@ -34,21 +52,64 @@ export function resolveProfile(cfg: PluginConfig, profile?: string): { instanceI
   return {};
 }
 
+async function discoverPinchtabConfig(): Promise<{ baseUrl?: string; token?: string } | null> {
+  if (discoveredConfig !== undefined) {
+    return discoveredConfig;
+  }
+
+  try {
+    const path = join(homedir(), ".pinchtab", "config.json");
+    const raw = await readFile(path, "utf8");
+    const parsed = JSON.parse(raw);
+    const bind = parsed?.server?.bind || "127.0.0.1";
+    const port = parsed?.server?.port;
+    const token = parsed?.server?.token;
+
+    let baseUrl: string | undefined;
+    if (port) {
+      const host = formatHostForUrl(normalizeDiscoveredHost(bind));
+      baseUrl = `http://${host}:${port}`;
+    }
+
+    discoveredConfig = {
+      baseUrl,
+      token: typeof token === "string" && token ? token : undefined,
+    };
+    return discoveredConfig;
+  } catch {
+    discoveredConfig = null;
+    return discoveredConfig;
+  }
+}
+
+export function formatDiscoveredBaseUrl(bind: string, port: string | number): string {
+  return `http://${formatHostForUrl(normalizeDiscoveredHost(bind))}:${port}`;
+}
+
+export async function resolveEffectiveConfig(cfg: PluginConfig): Promise<PluginConfig> {
+  const discovered = await discoverPinchtabConfig();
+  return {
+    ...cfg,
+    baseUrl: cfg.baseUrl || discovered?.baseUrl || "http://localhost:9867",
+    token: cfg.token || discovered?.token,
+  };
+}
+
 export async function getEnhancedHealth(cfg: PluginConfig): Promise<any> {
-  const base = cfg.baseUrl || "http://localhost:9867";
-  const health = await pinchtabFetch(cfg, "/health");
+  const effectiveCfg = await resolveEffectiveConfig(cfg);
+  const base = effectiveCfg.baseUrl || "http://localhost:9867";
+  const health = await pinchtabFetch(effectiveCfg, "/health");
   const serverOk = !health?.error;
 
   const result: any = {
     server: serverOk ? "ok" : "unreachable",
     baseUrl: base,
-    autoStart: cfg.autoStart !== false,
-    defaultProfile: cfg.defaultProfile || "openclaw",
+    defaultProfile: effectiveCfg.defaultProfile || "openclaw",
     policies: {
-      allowEvaluate: cfg.allowEvaluate === true,
-      allowDownloads: cfg.allowDownloads === true,
-      allowUploads: cfg.allowUploads === true,
-      allowedDomains: cfg.allowedDomains?.length ? cfg.allowedDomains : "all",
+      allowEvaluate: effectiveCfg.allowEvaluate === true,
+      allowDownloads: effectiveCfg.allowDownloads === true,
+      allowUploads: effectiveCfg.allowUploads === true,
+      allowedDomains: effectiveCfg.allowedDomains?.length ? effectiveCfg.allowedDomains : "all",
     },
   };
 
@@ -57,77 +118,79 @@ export async function getEnhancedHealth(cfg: PluginConfig): Promise<any> {
     if (health?.version) result.serverVersion = health.version;
   } else {
     result.error = health?.error;
+    if (isLocalHost(base)) {
+      result.hint = `Pinchtab is not reachable at ${base}. Start it with: pinchtab server`;
+    }
   }
 
   const warnings: string[] = [];
-  if (cfg.allowEvaluate) warnings.push("evaluate enabled - JS execution allowed");
-  if (!cfg.allowedDomains?.length) warnings.push("no domain restrictions");
+  if (effectiveCfg.allowEvaluate) warnings.push("evaluate enabled - JS execution allowed");
+  if (!effectiveCfg.allowedDomains?.length) warnings.push("no domain restrictions");
   if (warnings.length) result.warnings = warnings;
 
   return result;
 }
 
 export async function ensureServerRunning(cfg: PluginConfig): Promise<{ ok: boolean; error?: string; autoStarted?: boolean }> {
-  const base = cfg.baseUrl || "http://localhost:9867";
-
-  const healthCheck = await pinchtabFetch(cfg, "/health");
+  const effectiveCfg = await resolveEffectiveConfig(cfg);
+  const base = effectiveCfg.baseUrl || "http://localhost:9867";
+  const healthCheck = await pinchtabFetch(effectiveCfg, "/health");
   if (!healthCheck?.error) {
     return { ok: true };
   }
 
-  if (!isLocalHost(base) || cfg.autoStart === false || serverStarted) {
-    return { ok: false, error: healthCheck.error };
-  }
-
-  // Single-flight guard: if startup is in progress, wait for it
-  if (startupPromise) {
-    return startupPromise;
-  }
-
-  startupPromise = doStartServer(cfg);
-  try {
-    return await startupPromise;
-  } finally {
-    startupPromise = null;
-  }
+  const hint = isLocalHost(base)
+    ? ` Pinchtab is not running at ${base}. Start it with: pinchtab server`
+    : "";
+  return { ok: false, error: `${healthCheck.error}${hint}` };
 }
 
-async function resolveBinaryPath(binary: string): Promise<string> {
-  if (binary.startsWith("/") || binary.startsWith("./")) {
-    return binary;
-  }
-  try {
-    const { execFileSync } = await import("child_process");
-    const resolved = execFileSync("which", [binary], { encoding: "utf8" }).trim();
-    return resolved || binary;
-  } catch {
-    return binary;
-  }
-}
+export async function waitForInstanceReady(cfg: PluginConfig, instanceId?: string): Promise<{ ok: boolean; error?: string }> {
+  const effectiveCfg = await resolveEffectiveConfig(cfg);
+  const start = Date.now();
+  let lastError = "instance not ready";
 
-async function doStartServer(cfg: PluginConfig): Promise<{ ok: boolean; error?: string; autoStarted?: boolean }> {
-  const binary = await resolveBinaryPath(cfg.binaryPath || "pinchtab");
-  const startupTimeout = cfg.startupTimeoutMs ?? 30000;
-
-  try {
-    const { spawn } = await import("child_process");
-    const proc = spawn(binary, ["server"], {
-      detached: true,
-      stdio: "ignore",
-    });
-    proc.unref();
-    serverStarted = true;
-
-    const startTime = Date.now();
-    while (Date.now() - startTime < startupTimeout) {
-      await new Promise((r) => setTimeout(r, 500));
-      const check = await pinchtabFetch(cfg, "/health");
-      if (!check?.error) {
-        return { ok: true, autoStarted: true };
+  while (Date.now() - start < instanceReadyMaxWaitMs) {
+    const health = await pinchtabFetch(effectiveCfg, "/health");
+    if (!health?.error) {
+      const instances = await pinchtabFetch(effectiveCfg, "/instances");
+      const list = Array.isArray(instances?.value)
+        ? instances.value
+        : Array.isArray(instances)
+          ? instances
+          : [];
+      const running = instanceId
+        ? list.find((instance: any) => instance?.id === instanceId && instance?.status === "running")
+        : list.find((instance: any) => instance?.status === "running" && instance?.id);
+      if (running) {
+        return { ok: true };
       }
+      if (instanceId && list.some((instance: any) => instance?.id === instanceId)) {
+        lastError = `instance ${instanceId} not ready`;
+      }
+    } else {
+      lastError = health.error || lastError;
     }
-    return { ok: false, error: `Server failed to start within ${startupTimeout}ms` };
-  } catch (err: any) {
-    return { ok: false, error: `Failed to start pinchtab: ${err?.message}` };
+
+    if (instanceId) {
+      await new Promise((resolve) => setTimeout(resolve, instanceReadyRetryDelayMs));
+      continue;
+    }
+
+    const tabs = await pinchtabFetch(effectiveCfg, "/tabs");
+    if (!tabs?.error) {
+      return { ok: true };
+    }
+
+    const text = `${tabs?.error || ""} ${tabs?.body || ""}`.toLowerCase();
+    lastError = tabs?.error || lastError;
+
+    if (!text.includes("instance not ready") && !text.includes("may be restarting") && !text.includes("503")) {
+      return { ok: false, error: tabs?.error || "unknown readiness error" };
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, instanceReadyRetryDelayMs));
   }
+
+  return { ok: false, error: `Timed out waiting for Pinchtab instance readiness: ${lastError}` };
 }

@@ -11,14 +11,14 @@ openclaw gateway restart
 
 ## Quick Start
 
-The plugin can auto-start a local PinchTab server when needed (`autoStart: true` by default). This only works when `baseUrl` points to a local address (`localhost`, `127.0.0.1`, or `::1`).
+Install the plugin, restart the gateway, then point it at a running PinchTab server.
 
 ```bash
 openclaw plugins install @pinchtab/pinchtab
 openclaw gateway restart
 ```
 
-For remote servers or Docker, set `autoStart: false` and configure `baseUrl` manually.
+By default the plugin auto-discovers local PinchTab settings from `~/.pinchtab/config.json`. If discovery succeeds, you usually do not need to set `baseUrl` or `token` manually.
 
 ## Configure
 
@@ -33,13 +33,6 @@ For remote servers or Docker, set `autoStart: false` and configure `baseUrl` man
           baseUrl: "http://localhost:9867",
           token: "my-secret",
           timeoutMs: 30000,
-
-          // Auto-start (local only — localhost, 127.0.0.1, or ::1)
-          // When enabled, spawns a PinchTab server process if baseUrl
-          // points to a local address and the server is not running.
-          autoStart: true,
-          binaryPath: "pinchtab",    // absolute path or binary name in PATH
-          startupTimeoutMs: 30000,   // max wait for server to become ready
 
           // Policy
           allowEvaluate: false,      // block JS evaluate by default
@@ -78,7 +71,7 @@ For remote servers or Docker, set `autoStart: false` and configure `baseUrl` man
 
 ### Manual Server Setup
 
-If auto-start is disabled or you're using Docker:
+The plugin does not launch the server for you. Start PinchTab separately:
 
 ```bash
 # Local
@@ -88,16 +81,20 @@ PINCHTAB_TOKEN=my-secret pinchtab server &
 docker run -d -p 9867:9867 ghcr.io/pinchtab/pinchtab:latest
 ```
 
-## Two Tools: `browser` and `pinchtab`
+## Two Tools: `pinchtab` first, `browser` as compatibility
 
 The plugin registers two tools:
 
 | Tool | Use Case |
 |------|----------|
-| `browser` | OpenClaw-compatible, simplified interface for common flows |
-| `pinchtab` | Advanced control with all actions (mouse, wait, handoff, evaluate) |
+| `pinchtab` | Primary supported OpenClaw integration, full action surface |
+| `browser` | Compatibility alias for OpenClaw-style browser calls |
 
-Disable the browser tool with `registerBrowserTool: false` if you only want `pinchtab`.
+`pinchtab` is the primary documented integration path.
+
+`browser` is best-effort compatibility. Some OpenClaw surfaces treat `browser` specially, so the alias may not appear everywhere even when the plugin is loaded correctly.
+
+Disable the alias with `registerBrowserTool: false` if you only want `pinchtab`.
 
 ## Profiles
 
@@ -121,7 +118,9 @@ Map browser sessions to OpenClaw profile semantics:
 }
 ```
 
-Usage: `browser({ action: "navigate", url: "...", profile: "user" })`
+Usage: `pinchtab({ action: "navigate", url: "https://example.com" })`
+
+Compatibility usage: `browser({ action: "navigate", url: "...", profile: "user" })`
 
 ## Browser Tool Actions
 
@@ -236,6 +235,14 @@ pinchtab({ action: "wait", text: "Welcome back", timeout: 120000 })
 - Use `PINCHTAB_TOKEN` to gate API access; rotate regularly
 - In production, run behind HTTPS reverse proxy (Caddy/nginx)
 
+## OpenClaw Integration Notes
+
+The most reliable OpenClaw integration path is the `pinchtab` tool.
+
+If you disable the bundled OpenClaw browser plugin and enable this plugin, agent turns that explicitly choose `browser` can resolve to PinchTab. However, OpenClaw may still route some tasks to other tools such as `web_fetch` or `canvas`, and some direct gateway surfaces may treat `browser` as a special compatibility name.
+
+For plugin-level validation in OpenClaw, prefer invoking `pinchtab` directly.
+
 ## Migrating from OpenClaw Bundled Browser
 
 To replace the bundled `browser` plugin with PinchTab:
@@ -274,13 +281,13 @@ To replace the bundled `browser` plugin with PinchTab:
 
 ### 4. Key differences
 
-- **Auto-start**: PinchTab auto-starts locally by default (disable with `autoStart: false`)
+- **Server lifecycle**: start PinchTab separately; the plugin waits for readiness but does not spawn the server
 - **Policy**: `allowEvaluate`, `allowDownloads`, `allowUploads` are `false` by default
-- **Advanced actions**: Use `pinchtab` tool for mouse controls, wait, handoff, evaluate
+- **Advanced actions**: use `pinchtab` for mouse controls, wait, handoff, evaluate, and direct plugin validation
 
 ## Requirements
 
-- PinchTab binary in PATH (or set `binaryPath`)
+- Running PinchTab server
 - OpenClaw Gateway
 
 ## Disclaimer

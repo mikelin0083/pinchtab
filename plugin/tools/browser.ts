@@ -1,7 +1,7 @@
 import type { PluginConfig } from "../types.js";
 import { pinchtabFetch, textResult, imageResult, resourceResult } from "../client.js";
 import { checkNavigationPolicy, enforcePolicyOrReturn } from "../policy.js";
-import { ensureServerRunning, getEnhancedHealth, resolveProfile, getLastTabId, setLastTabId } from "../session.js";
+import { ensureServerRunning, waitForInstanceReady, getEnhancedHealth, resolveProfile, getLastTabId, setLastTabId } from "../session.js";
 
 export const browserToolSchema = {
   type: "object",
@@ -55,6 +55,10 @@ export async function executeBrowserAction(cfg: PluginConfig, params: any): Prom
     if (!serverCheck.ok) {
       return textResult({ error: serverCheck.error });
     }
+    const readyCheck = await waitForInstanceReady(cfg, profileConfig.instanceId);
+    if (!readyCheck.ok) {
+      return textResult({ error: readyCheck.error });
+    }
   }
 
   // Session tab persistence
@@ -67,11 +71,20 @@ export async function executeBrowserAction(cfg: PluginConfig, params: any): Prom
     const navPolicy = enforcePolicyOrReturn(checkNavigationPolicy(cfg, params.url));
     if (navPolicy) return navPolicy;
 
-    const body: any = { url: params.url };
-    if (params.tabId) body.tabId = params.tabId;
-    if (params.newTab) body.newTab = true;
-    if (profileConfig.instanceId) body.instanceId = profileConfig.instanceId;
-    const result = await pinchtabFetch(cfg, "/navigate", { body });
+    let result;
+    if (params.newTab) {
+      const body: any = { action: "new", url: params.url };
+      if (profileConfig.instanceId) body.instanceId = profileConfig.instanceId;
+      result = await pinchtabFetch(cfg, "/tab", { body });
+    } else if (params.tabId) {
+      const body: any = { url: params.url };
+      if (profileConfig.instanceId) body.instanceId = profileConfig.instanceId;
+      result = await pinchtabFetch(cfg, `/tabs/${encodeURIComponent(params.tabId)}/navigate`, { body });
+    } else {
+      const body: any = { url: params.url };
+      if (profileConfig.instanceId) body.instanceId = profileConfig.instanceId;
+      result = await pinchtabFetch(cfg, "/navigate", { body });
+    }
     if (result?.tabId) setLastTabId(result.tabId);
     return textResult(result);
   }

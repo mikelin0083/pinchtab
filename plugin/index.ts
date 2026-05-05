@@ -6,6 +6,7 @@
  * - `browser`: OpenClaw-compatible simplified interface
  */
 
+import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import type { PluginApi, PluginConfig, PluginTool } from "./types.js";
 import { pinchtabToolSchema, pinchtabToolDescription, executePinchtabAction } from "./tools/pinchtab.js";
 import { browserToolSchema, browserToolDescription, executeBrowserAction } from "./tools/browser.js";
@@ -14,32 +15,35 @@ function getConfig(api: PluginApi): PluginConfig {
   return (api.pluginConfig ?? api.config?.plugins?.entries?.pinchtab?.config ?? {}) as PluginConfig;
 }
 
-export default function register(api: PluginApi) {
-  const cfg = getConfig(api);
+export default definePluginEntry({
+  id: "pinchtab",
+  name: "Pinchtab",
+  description: "Browser control for AI agents via Pinchtab.",
+  register(api) {
+    const cfg = getConfig(api);
 
-  // Register the full-featured pinchtab tool
-  const pinchtabTool = {
-    name: "pinchtab",
-    label: "PinchTab",
-    description: pinchtabToolDescription,
-    parameters: pinchtabToolSchema,
-    async execute(_id: string, params: any) {
-      return executePinchtabAction(getConfig(api), params);
-    },
-  } satisfies PluginTool;
-  api.registerTool(pinchtabTool, { optional: true });
-
-  // Register OpenClaw-compatible browser tool
-  if (cfg.registerBrowserTool !== false) {
-    const browserTool = {
-      name: "browser",
-      label: "Browser",
-      description: browserToolDescription,
-      parameters: browserToolSchema,
+    const pinchtabTool = {
+      name: "pinchtab",
+      label: "PinchTab",
+      description: pinchtabToolDescription,
+      parameters: pinchtabToolSchema,
       async execute(_id: string, params: any) {
-        return executeBrowserAction(getConfig(api), params);
+        return executePinchtabAction(getConfig(api), params);
       },
     } satisfies PluginTool;
-    api.registerTool(browserTool, { optional: true });
-  }
-}
+    api.registerTool(pinchtabTool);
+
+    if (cfg.registerBrowserTool !== false) {
+      const browserTool = {
+        name: "browser",
+        label: "Browser",
+        description: browserToolDescription,
+        parameters: browserToolSchema,
+        async execute(_id: string, params: any) {
+          return executeBrowserAction(getConfig(api), params);
+        },
+      } satisfies PluginTool;
+      api.registerTool(browserTool);
+    }
+  },
+});

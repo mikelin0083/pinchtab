@@ -1,18 +1,20 @@
 import type { PluginConfig, ToolResult } from "./types.js";
+import { resolveEffectiveConfig } from "./session.js";
 
 export async function pinchtabFetch(
   cfg: PluginConfig,
   path: string,
   opts: { method?: string; body?: unknown; rawResponse?: boolean } = {},
 ): Promise<any> {
-  const base = cfg.baseUrl || "http://localhost:9867";
+  const effectiveCfg = await resolveEffectiveConfig(cfg);
+  const base = effectiveCfg.baseUrl || "http://localhost:9867";
   const url = `${base}${path}`;
   const headers: Record<string, string> = {};
-  if (cfg.token) headers["Authorization"] = `Bearer ${cfg.token}`;
+  if (effectiveCfg.token) headers["Authorization"] = `Bearer ${effectiveCfg.token}`;
   if (opts.body) headers["Content-Type"] = "application/json";
 
   const controller = new AbortController();
-  const timeout = cfg.timeoutMs ?? cfg.timeout ?? 30000;
+  const timeout = effectiveCfg.timeoutMs ?? effectiveCfg.timeout ?? 30000;
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
