@@ -47,6 +47,7 @@ COMMANDS=(
   "  agent-browser:📊:Run agent-browser benchmark via Anthropic Messages API"
   "  browserbench:📊:Run BrowserBench CSV tasks through PinchTab"
   "doctor:🩺:Setup dev environment"
+  "install:📦:Build & install to ~/.local/bin (override with PINCHTAB_INSTALL_DIR)"
   "check go:🧪:Go only"
   "check dashboard:🧪:Dashboard only"
   "check npm:🧪:npm package only"
@@ -283,6 +284,7 @@ run_command() {
     "dev")          exec bash scripts/dev.sh ;;
     "dashboard")    exec bash scripts/dev-dashboard.sh ;;
     "build")        exec bash scripts/build.sh ;;
+    "install")      exec bash scripts/install.sh ;;
     "binary")       exec bash scripts/binary.sh ;;
     "binary all"|"binaries") exec bash scripts/binary.sh all ;;
     "all")
