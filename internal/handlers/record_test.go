@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/pinchtab/pinchtab/internal/config"
 )
@@ -135,6 +136,9 @@ func TestHandleRecordStatus_Inactive(t *testing.T) {
 	if resp.Active {
 		t.Errorf("expected active=false, got true")
 	}
+	if resp.State != "idle" {
+		t.Errorf("expected state=idle, got %q", resp.State)
+	}
 }
 
 func TestRecorderStatus_Active(t *testing.T) {
@@ -149,6 +153,9 @@ func TestRecorderStatus_Active(t *testing.T) {
 	status := rec.status()
 	if !status.Active {
 		t.Errorf("expected active=true, got false")
+	}
+	if status.State != "recording" {
+		t.Errorf("expected state=recording, got %q", status.State)
 	}
 	if status.Format != "gif" {
 		t.Errorf("expected format=gif, got %q", status.Format)
@@ -238,4 +245,69 @@ func TestRecorderStop_NoOwnerCanStopAnonymous(t *testing.T) {
 
 func TestFFmpegAvailable(t *testing.T) {
 	_ = ffmpegAvailable()
+}
+
+func TestRecorderStateString(t *testing.T) {
+	tests := []struct {
+		state recorderState
+		want  string
+	}{
+		{stateIdle, "idle"},
+		{stateRecording, "recording"},
+		{stateLimitReached, "limit_reached"},
+		{stateStopping, "stopping"},
+		{stateEncoding, "encoding"},
+		{stateFinished, "finished"},
+		{stateAborted, "aborted"},
+		{recorderState(99), "unknown"},
+	}
+	for _, tt := range tests {
+		if got := tt.state.String(); got != tt.want {
+			t.Errorf("recorderState(%d).String() = %q, want %q", tt.state, got, tt.want)
+		}
+	}
+}
+
+func TestRecorderStatus_Aborted(t *testing.T) {
+	rec := &recorder{}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	if err := rec.start(ctx, "tab1", "", "gif", 5, 80, 1.0); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	cancel()
+	// Wait for capture loop to detect cancellation and transition to aborted.
+	time.Sleep(100 * time.Millisecond)
+
+	status := rec.status()
+	if status.Active {
+		t.Errorf("expected active=false after abort")
+	}
+	if status.State != "aborted" {
+		t.Errorf("expected state=aborted, got %q", status.State)
+	}
+	if status.StopReason != "tab_closed" {
+		t.Errorf("expected stopReason=tab_closed, got %q", status.StopReason)
+	}
+}
+
+func TestRecorderStatus_IdleAfterStop(t *testing.T) {
+	rec := &recorder{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := rec.start(ctx, "tab1", "", "gif", 5, 80, 1.0); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	_, _, _ = rec.stop("")
+
+	status := rec.status()
+	if status.Active {
+		t.Errorf("expected active=false after stop")
+	}
+	if status.State != "idle" {
+		t.Errorf("expected state=idle after stop+cleanup, got %q", status.State)
+	}
 }

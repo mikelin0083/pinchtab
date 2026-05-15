@@ -42,40 +42,78 @@ const (
 	maxScale          = 1.0
 )
 
+type recorderState int
+
+const (
+	stateIdle         recorderState = iota
+	stateRecording                  // capture loop is running
+	stateLimitReached               // capture stopped due to limit; frames on disk awaiting stop()
+	stateStopping                   // stop() called; waiting for capture loop to finish
+	stateEncoding                   // encoding frames to output format
+	stateFinished                   // encoding complete; cleanup pending
+	stateAborted                    // tab context was cancelled; resources cleaned up
+)
+
+func (s recorderState) String() string {
+	switch s {
+	case stateIdle:
+		return "idle"
+	case stateRecording:
+		return "recording"
+	case stateLimitReached:
+		return "limit_reached"
+	case stateStopping:
+		return "stopping"
+	case stateEncoding:
+		return "encoding"
+	case stateFinished:
+		return "finished"
+	case stateAborted:
+		return "aborted"
+	default:
+		return "unknown"
+	}
+}
+
 type RecordingStatus struct {
-	Active   bool    `json:"active"`
-	Format   string  `json:"format,omitempty"`
-	Duration float64 `json:"durationSeconds,omitempty"`
-	Frames   int     `json:"frames"`
-	TabID    string  `json:"tabId,omitempty"`
-	FPS      int     `json:"fps,omitempty"`
+	Active     bool    `json:"active"`
+	State      string  `json:"state"`
+	StopReason string  `json:"stopReason,omitempty"`
+	Format     string  `json:"format,omitempty"`
+	Duration   float64 `json:"durationSeconds,omitempty"`
+	Frames     int     `json:"frames"`
+	TabID      string  `json:"tabId,omitempty"`
+	FPS        int     `json:"fps,omitempty"`
 }
 
 type recorder struct {
-	mu        sync.Mutex
-	active    bool
-	stopping  bool
-	tabCtx    context.Context
-	tabCancel context.CancelFunc
-	tabID     string
-	owner     string // opaque key derived from authenticated session, never exposed
-	format    string
-	fps       int
-	quality   int
-	scale     float64
-	tmpDir    string
-	frameNum  int
-	tempBytes int64
-	startTime time.Time
-	stopCh    chan struct{}
-	doneCh    chan struct{}
+	mu         sync.Mutex
+	state      recorderState
+	stopReason string
+	tabCtx     context.Context
+	tabCancel  context.CancelFunc
+	tabID      string
+	owner      string // opaque key derived from authenticated session, never exposed
+	format     string
+	fps        int
+	quality    int
+	scale      float64
+	tmpDir     string
+	frameNum   int
+	startTime  time.Time
+	stopCh     chan struct{}
+	doneCh     chan struct{}
 }
 
 func (rec *recorder) start(tabCtx context.Context, tabID, owner, format string, fps, quality int, scale float64) error {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 
-	if rec.active {
+	if rec.state == stateAborted {
+		rec.state = stateIdle
+		rec.stopReason = ""
+	}
+	if rec.state != stateIdle {
 		return fmt.Errorf("recording already in progress")
 	}
 
@@ -86,8 +124,8 @@ func (rec *recorder) start(tabCtx context.Context, tabID, owner, format string, 
 
 	ctx, cancel := context.WithCancel(tabCtx)
 
-	rec.active = true
-	rec.stopping = false
+	rec.state = stateRecording
+	rec.stopReason = ""
 	rec.tabCtx = ctx
 	rec.tabCancel = cancel
 	rec.tabID = tabID
@@ -98,7 +136,6 @@ func (rec *recorder) start(tabCtx context.Context, tabID, owner, format string, 
 	rec.scale = scale
 	rec.tmpDir = tmpDir
 	rec.frameNum = 0
-	rec.tempBytes = 0
 	rec.startTime = time.Now()
 	rec.stopCh = make(chan struct{})
 	rec.doneCh = make(chan struct{})
@@ -109,11 +146,11 @@ func (rec *recorder) start(tabCtx context.Context, tabID, owner, format string, 
 
 func (rec *recorder) stop(callerOwner string) ([]byte, string, error) {
 	rec.mu.Lock()
-	if !rec.active {
+	if rec.state == stateIdle || rec.state == stateAborted {
 		rec.mu.Unlock()
 		return nil, "", fmt.Errorf("no active recording")
 	}
-	if rec.stopping {
+	if rec.state == stateStopping || rec.state == stateEncoding || rec.state == stateFinished {
 		doneCh := rec.doneCh
 		rec.mu.Unlock()
 		<-doneCh
@@ -123,7 +160,7 @@ func (rec *recorder) stop(callerOwner string) ([]byte, string, error) {
 		rec.mu.Unlock()
 		return nil, "", fmt.Errorf("recording owned by another session")
 	}
-	rec.stopping = true
+	rec.state = stateStopping
 	close(rec.stopCh)
 	doneCh := rec.doneCh
 	format := rec.format
@@ -135,7 +172,10 @@ func (rec *recorder) stop(callerOwner string) ([]byte, string, error) {
 
 	<-doneCh
 
-	// Encode without holding the mutex so status/start aren't blocked.
+	rec.mu.Lock()
+	rec.state = stateEncoding
+	rec.mu.Unlock()
+
 	var data []byte
 	var encErr error
 	if frameNum > 0 {
@@ -146,7 +186,10 @@ func (rec *recorder) stop(callerOwner string) ([]byte, string, error) {
 
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
-	defer rec.cleanup()
+	rec.state = stateFinished
+	rec.cleanup()
+	rec.state = stateIdle
+	rec.stopReason = ""
 
 	if encErr != nil {
 		return nil, "", encErr
@@ -154,6 +197,8 @@ func (rec *recorder) stop(callerOwner string) ([]byte, string, error) {
 	return data, format, nil
 }
 
+// cleanup releases resources but does not change state — callers set the
+// final state (stateIdle, stateAborted, etc.) before or after calling this.
 func (rec *recorder) cleanup() {
 	if rec.tabCancel != nil {
 		rec.tabCancel()
@@ -162,8 +207,6 @@ func (rec *recorder) cleanup() {
 	if rec.tmpDir != "" {
 		_ = os.RemoveAll(rec.tmpDir)
 	}
-	rec.active = false
-	rec.stopping = false
 	rec.tmpDir = ""
 	rec.owner = ""
 }
@@ -172,16 +215,18 @@ func (rec *recorder) status() RecordingStatus {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 
-	if !rec.active {
-		return RecordingStatus{}
+	if rec.state == stateIdle {
+		return RecordingStatus{State: stateIdle.String()}
 	}
 	return RecordingStatus{
-		Active:   true,
-		Format:   rec.format,
-		Duration: time.Since(rec.startTime).Seconds(),
-		Frames:   rec.frameNum,
-		TabID:    rec.tabID,
-		FPS:      rec.fps,
+		Active:     rec.state != stateAborted,
+		State:      rec.state.String(),
+		StopReason: rec.stopReason,
+		Format:     rec.format,
+		Duration:   time.Since(rec.startTime).Seconds(),
+		Frames:     rec.frameNum,
+		TabID:      rec.tabID,
+		FPS:        rec.fps,
 	}
 }
 
@@ -196,7 +241,6 @@ func (rec *recorder) captureLoop() {
 	defer ticker.Stop()
 
 	var diskBytes atomic.Int64
-	limitHit := false
 
 	for {
 		select {
@@ -204,58 +248,72 @@ func (rec *recorder) captureLoop() {
 			return
 		case <-rec.tabCtx.Done():
 			rec.mu.Lock()
+			rec.state = stateAborted
+			rec.stopReason = "tab_closed"
 			rec.cleanup()
 			rec.mu.Unlock()
 			slog.Info("recording aborted: tab context canceled", "tab", rec.tabID)
 			return
 		case <-deadline.C:
+			rec.transitionToLimitReached("max_duration")
 			slog.Info("recording stopped: max duration reached", "tab", rec.tabID)
-			limitHit = true
+			rec.scheduleLimitCleanup()
+			return
 		case <-ticker.C:
-			rec.mu.Lock()
-			if rec.frameNum >= maxRecordFrames {
-				rec.mu.Unlock()
-				slog.Info("recording stopped: max frames reached", "tab", rec.tabID)
-				limitHit = true
-			} else {
-				rec.mu.Unlock()
+			if reason := rec.checkLimits(&diskBytes); reason != "" {
+				rec.transitionToLimitReached(reason)
+				slog.Info("recording stopped: "+reason, "tab", rec.tabID)
+				rec.scheduleLimitCleanup()
+				return
 			}
-
-			if !limitHit && diskBytes.Load() >= int64(maxTempBytes) {
-				slog.Info("recording stopped: temp disk limit reached", "tab", rec.tabID)
-				limitHit = true
-			}
-
-			if limitHit {
-				// noop: break out to the cleanup below
-			} else {
-				frame, err := captureScreencastJPEG(rec.tabCtx, rec.quality)
-				if err != nil {
-					slog.Debug("recording frame capture failed", "err", err)
-					continue
-				}
-
-				rec.mu.Lock()
-				rec.frameNum++
-				path := filepath.Join(rec.tmpDir, fmt.Sprintf("frame_%06d.jpg", rec.frameNum))
-				rec.mu.Unlock()
-
-				if err := os.WriteFile(path, frame, 0600); err != nil {
-					slog.Debug("recording frame write failed", "err", err)
-				} else {
-					diskBytes.Add(int64(len(frame)))
-				}
-				continue
-			}
-		}
-
-		if limitHit {
-			break
+			rec.writeFrame(&diskBytes)
 		}
 	}
+}
 
-	// Limit was reached. Keep frames for stop() to encode, but auto-cleanup
-	// after a grace period if nobody calls stop().
+func (rec *recorder) checkLimits(diskBytes *atomic.Int64) string {
+	rec.mu.Lock()
+	frames := rec.frameNum
+	rec.mu.Unlock()
+
+	if frames >= maxRecordFrames {
+		return "max_frames"
+	}
+	if diskBytes.Load() >= int64(maxTempBytes) {
+		return "disk_limit"
+	}
+	return ""
+}
+
+func (rec *recorder) writeFrame(diskBytes *atomic.Int64) {
+	frame, err := captureScreencastJPEG(rec.tabCtx, rec.quality)
+	if err != nil {
+		slog.Debug("recording frame capture failed", "err", err)
+		return
+	}
+
+	rec.mu.Lock()
+	rec.frameNum++
+	path := filepath.Join(rec.tmpDir, fmt.Sprintf("frame_%06d.jpg", rec.frameNum))
+	rec.mu.Unlock()
+
+	if err := os.WriteFile(path, frame, 0600); err != nil {
+		slog.Debug("recording frame write failed", "err", err)
+	} else {
+		diskBytes.Add(int64(len(frame)))
+	}
+}
+
+func (rec *recorder) transitionToLimitReached(reason string) {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	rec.state = stateLimitReached
+	rec.stopReason = reason
+}
+
+// scheduleLimitCleanup starts a goroutine that auto-cleans the recording
+// after limitCleanupGrace if nobody calls stop().
+func (rec *recorder) scheduleLimitCleanup() {
 	go func() {
 		timer := time.NewTimer(limitCleanupGrace)
 		defer timer.Stop()
@@ -265,9 +323,11 @@ func (rec *recorder) captureLoop() {
 		case <-timer.C:
 			rec.mu.Lock()
 			defer rec.mu.Unlock()
-			if rec.active && !rec.stopping {
+			if rec.state == stateLimitReached {
 				slog.Info("recording auto-cleanup after limit grace period", "tab", rec.tabID)
 				rec.cleanup()
+				rec.state = stateIdle
+				rec.stopReason = ""
 			}
 		}
 	}()
@@ -524,7 +584,10 @@ func (h *Handlers) HandleRecordStart(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleRecordStop stops the active recording and returns the encoded file.
+// HandleRecordStop stops the active recording and returns the encoded binary
+// file directly (not JSON). The Content-Type is set to the appropriate media
+// type (image/gif, video/webm, video/mp4). This endpoint is fundamentally
+// different from most other API endpoints which return JSON.
 func (h *Handlers) HandleRecordStop(w http.ResponseWriter, r *http.Request) {
 	// Encoding can exceed the default WriteTimeout; extend the deadline.
 	rc := http.NewResponseController(w)
@@ -561,10 +624,9 @@ func (h *Handlers) HandleRecordStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // authenticatedOwner derives a non-secret owner key from the authenticated
-// session context. On direct requests, session.FromRequest provides the
-// session. On proxy hops (orchestrator → child bridge), the session is not
-// attached but X-PinchTab-Session-Id / X-Agent-Id headers are preserved by
-// trust middleware — we honor those only when IsTrustedInternalProxy is true.
+// session context. Returns "" for anonymous (unauthenticated) requests.
+// Anonymous recordings can be stopped by any caller, including other anonymous
+// callers — this is intentional for the single-user local model.
 func authenticatedOwner(r *http.Request) string {
 	if sess, ok := session.FromRequest(r); ok && sess != nil {
 		if id := strings.TrimSpace(sess.AgentID); id != "" {
