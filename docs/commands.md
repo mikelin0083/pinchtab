@@ -4,6 +4,8 @@
 
 ```bash
 pinchtab server                         # Start the full server (dashboard + API)
+pinchtab server stop                    # Stop the running server (foreground or background)
+pinchtab server restart                 # Stop + restart in background (applies config changes)
 pinchtab bridge                         # Start the bridge-only runtime
 pinchtab mcp                            # Start the MCP stdio server
 pinchtab daemon                         # Show daemon status

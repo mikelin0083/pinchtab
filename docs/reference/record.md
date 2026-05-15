@@ -58,11 +58,21 @@ curl -X POST http://localhost:9867/record/stop > recording.gif
 - `--scale <f>`: Resolution scale (default 1.0).
 - `--tab <id>`: Target a specific tab.
 
+## Format Dependencies
+
+| Format | Dependency | Encoding | Notes |
+| --- | --- | --- | --- |
+| `.gif` | None | Pure Go (Floyd-Steinberg dithering) | Always available; CPU-intensive for long recordings |
+| `.webm` | `ffmpeg` | VP8 via ffmpeg pipe | Requires ffmpeg on `$PATH` |
+| `.mp4` | `ffmpeg` | H.264 via ffmpeg pipe | Requires ffmpeg on `$PATH` |
+
+GIF encoding runs entirely in-process — no external binary needed. Dithering is CPU-bound; recordings over ~2 minutes at 10 fps can take 30-60 seconds to encode. Frames are capped at 600 (max ~2 minutes at 5 fps) and downscaled if they exceed 1280x720 pixels to limit memory usage.
+
+WebM and MP4 stream frames to ffmpeg during `record stop`. If ffmpeg is not installed, `record start` returns a 400 error with a message indicating the dependency. Install ffmpeg via your package manager (`brew install ffmpeg`, `apt install ffmpeg`, etc.) or use `.gif` as a zero-dependency alternative.
+
 ## Notes
 
-- Gated by `security.allowScreencast`.
-- `.webm` and `.mp4` require `ffmpeg` installed on the server.
-- `.gif` always available (pure Go encoding).
+- Gated by `security.allowScreencast` (disabled by default). Enable with `pinchtab config set security.allowScreencast true` and restart the server.
 - One active recording per bridge instance.
 
 ## Related Pages

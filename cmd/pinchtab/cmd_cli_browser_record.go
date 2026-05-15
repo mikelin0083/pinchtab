@@ -1,6 +1,9 @@
 package main
 
 import (
+	"net/http"
+	"time"
+
 	browseractions "github.com/pinchtab/pinchtab/internal/cli/actions"
 	"github.com/spf13/cobra"
 )
@@ -26,7 +29,12 @@ var recordStopCmd = &cobra.Command{
 	Short: "Stop recording and save",
 	Run: func(cmd *cobra.Command, args []string) {
 		runCLI(func(rt cliRuntime) {
-			browseractions.RecordStop(rt.client, rt.base, rt.token)
+			// Encoding can take minutes; use a dedicated long-timeout client.
+			longClient := &http.Client{
+				Timeout:   3 * time.Minute,
+				Transport: rt.client.Transport,
+			}
+			browseractions.RecordStop(longClient, rt.base, rt.token)
 		})
 	},
 }

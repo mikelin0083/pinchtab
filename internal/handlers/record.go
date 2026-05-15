@@ -440,7 +440,11 @@ func (h *Handlers) HandleRecordStart(w http.ResponseWriter, r *http.Request) {
 	if !h.Config.AllowScreencast {
 		httpx.ErrorCode(w, 403, "recording_disabled",
 			httpx.DisabledEndpointMessage("recording", "security.allowScreencast"), false,
-			map[string]any{"setting": "security.allowScreencast"})
+			map[string]any{
+				"setting": "security.allowScreencast",
+				"hint":    "Recording requires screen capture to be enabled.",
+				"remedy":  "pinchtab config set security.allowScreencast true",
+			})
 		return
 	}
 
@@ -522,6 +526,10 @@ func (h *Handlers) HandleRecordStart(w http.ResponseWriter, r *http.Request) {
 
 // HandleRecordStop stops the active recording and returns the encoded file.
 func (h *Handlers) HandleRecordStop(w http.ResponseWriter, r *http.Request) {
+	// Encoding can exceed the default WriteTimeout; extend the deadline.
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Now().Add(encodeTimeout + 30*time.Second))
+
 	owner := authenticatedOwner(r)
 	data, format, err := h.recorder.stop(owner)
 	if err != nil {
