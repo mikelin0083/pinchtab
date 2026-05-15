@@ -30,7 +30,7 @@ pt_get /record/status
 assert_ok "record status"
 assert_json_eq "$RESULT" ".active" "true" "recording active"
 
-pt_post /record/stop -d '{"outputPath":"/tmp/e2e-recording-test.gif"}'
+pt_post /record/stop -d '{}'
 assert_ok "record stop"
 assert_json_eq "$RESULT" ".status" "encoding" "stop returns encoding status"
 
@@ -77,10 +77,39 @@ assert_ok "start for double stop"
 
 sleep 2
 
-pt_post /record/stop -d '{"outputPath":"/tmp/e2e-recording-double-stop.gif"}'
+pt_post /record/stop -d '{}'
 assert_ok "first stop"
 
-pt_post /record/stop -d '{"outputPath":"/tmp/e2e-recording-double-stop2.gif"}'
+pt_post /record/stop -d '{}'
 assert_http_status 400 "second stop returns error"
+
+# Wait for background encoding from the first stop to finish before next test
+for i in $(seq 1 60); do
+  pt_get /record/status >/dev/null 2>&1
+  STATE=$(echo "$RESULT" | jq -r '.state // empty')
+  if [ "$STATE" = "finished" ] || [ "$STATE" = "idle" ]; then break; fi
+  sleep 1
+done
+
+end_test
+
+# ─────────────────────────────────────────────────────────────────
+start_test "record: discard drops frames without encoding"
+
+pt_post /navigate -d "{\"url\":\"${FIXTURES_URL}/index.html\"}"
+assert_ok "navigate for discard"
+
+pt_post /record/start -d '{"format":"gif","fps":2,"quality":60}'
+assert_ok "start for discard"
+
+sleep 2
+
+pt_post /record/stop -d '{"discard":true}'
+assert_ok "discard stop"
+assert_json_eq "$RESULT" ".status" "discarded" "discard returns discarded status"
+
+pt_get /record/status
+assert_ok "status after discard"
+assert_json_eq "$RESULT" ".state" "idle" "idle after discard"
 
 end_test

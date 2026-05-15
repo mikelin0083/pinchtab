@@ -62,9 +62,9 @@ func RecordStop(client *http.Client, base, token string) {
 		outFile = abs
 	}
 
-	raw := apiclient.DoPostRaw(client, base, token, "/record/stop", map[string]any{
-		"outputPath": outFile,
-	})
+	// Server encodes to its own recordings directory; we move the file
+	// to the user's desired location after encoding completes.
+	raw := apiclient.DoPostRaw(client, base, token, "/record/stop", map[string]any{})
 	clearRecordingState()
 
 	if raw == nil {
@@ -75,15 +75,48 @@ func RecordStop(client *http.Client, base, token string) {
 		Status string `json:"status"`
 		Path   string `json:"path"`
 		Frames int    `json:"frames"`
-		Hint   string `json:"hint"`
 	}
 	if err := json.Unmarshal(raw, &result); err != nil {
-		fmt.Println(cli.StyleStdout(cli.SuccessStyle, fmt.Sprintf("Encoding → %s", outFile)))
+		fmt.Println(cli.StyleStdout(cli.SuccessStyle, "Recording stopped"))
 		return
 	}
 
-	fmt.Println(cli.StyleStdout(cli.SuccessStyle,
-		fmt.Sprintf("Encoding %d frames → %s (use `record status` to check progress)", result.Frames, result.Path)))
+	if result.Path == "" {
+		fmt.Println(cli.StyleStdout(cli.SuccessStyle,
+			fmt.Sprintf("Recording stopped (%d frames)", result.Frames)))
+		return
+	}
+
+	fmt.Println(cli.StyleStdout(cli.MutedStyle,
+		fmt.Sprintf("Encoding %d frames...", result.Frames)))
+
+	serverPath := result.Path
+	for i := 0; i < 300; i++ {
+		time.Sleep(time.Second)
+		statusRaw := apiclient.DoGetRaw(client, base, token, "/record/status", nil)
+		if statusRaw == nil {
+			continue
+		}
+		var s struct {
+			State string `json:"state"`
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(statusRaw, &s) != nil {
+			continue
+		}
+		if s.State == "finished" || s.State == "idle" {
+			if s.Error != "" {
+				cli.Fatal("Encoding failed: %s", s.Error)
+			}
+			if err := os.Rename(serverPath, outFile); err != nil {
+				cli.Fatal("Failed to move %s → %s: %v", serverPath, outFile, err)
+			}
+			fmt.Println(cli.StyleStdout(cli.SuccessStyle,
+				fmt.Sprintf("Saved → %s", outFile)))
+			return
+		}
+	}
+	cli.Fatal("Encoding timed out — file may be at %s", serverPath)
 }
 
 func RecordStatus(client *http.Client, base, token string) {

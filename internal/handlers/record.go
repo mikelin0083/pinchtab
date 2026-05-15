@@ -277,6 +277,15 @@ func (rec *recorder) cleanup() {
 	rec.encodeErr = nil
 }
 
+func (rec *recorder) activeFormat() string {
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if rec.format == "" {
+		return "gif"
+	}
+	return rec.format
+}
+
 func (rec *recorder) status() RecordingStatus {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
@@ -653,31 +662,34 @@ func (h *Handlers) HandleRecordStart(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// HandleRecordStop stops the active recording. If outputPath is provided,
-// encoding runs in the background and the endpoint returns immediately.
-// If outputPath is empty, the recording is discarded (capture stops, no
-// encoding). Use /record/status to check encoding progress.
+// HandleRecordStop stops the active recording. If discard is false (default),
+// encoding runs in the background into a server-controlled recordings directory
+// and the endpoint returns the path immediately. If discard is true, frames are
+// dropped without encoding. Use /record/status to check encoding progress.
 func (h *Handlers) HandleRecordStop(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		OutputPath string `json:"outputPath"`
+		Discard bool `json:"discard"`
 	}
 	_ = httpx.DecodeJSONBody(w, r, 0, &req)
 
-	if req.OutputPath != "" {
-		if err := validateOutputPath(req.OutputPath); err != nil {
-			httpx.ErrorCode(w, 400, "invalid_output_path", err.Error(), false, nil)
+	var outputPath string
+	if !req.Discard {
+		var err error
+		outputPath, err = h.recordingsOutputPath()
+		if err != nil {
+			httpx.ErrorCode(w, 500, "recording_error", err.Error(), false, nil)
 			return
 		}
 	}
 
 	owner := authenticatedOwner(r)
-	result, err := h.recorder.stop(owner, req.OutputPath)
+	result, err := h.recorder.stop(owner, outputPath)
 	if err != nil {
 		httpx.ErrorCode(w, 400, "recording_error", err.Error(), false, nil)
 		return
 	}
 
-	if req.OutputPath == "" {
+	if req.Discard {
 		httpx.JSON(w, 200, map[string]any{
 			"status": "discarded",
 			"format": result.Format,
@@ -697,46 +709,17 @@ func (h *Handlers) HandleRecordStop(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// validateOutputPath checks that an output path is safe to write to:
-// absolute, supported extension, parent dir exists and is not a symlink,
-// target and temp file do not already exist.
-func validateOutputPath(path string) error {
-	cleaned := filepath.Clean(path)
-	if !filepath.IsAbs(cleaned) {
-		return fmt.Errorf("outputPath must be an absolute path, got %q", path)
+// recordingsOutputPath returns a unique output path inside the server-controlled
+// recordings directory. The caller never chooses the path — only the server does.
+func (h *Handlers) recordingsOutputPath() (string, error) {
+	dir := filepath.Join(h.Config.StateDir, "recordings")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", fmt.Errorf("create recordings dir: %w", err)
 	}
-	ext := filepath.Ext(cleaned)
-	switch ext {
-	case ".gif", ".webm", ".mp4":
-	default:
-		return fmt.Errorf("unsupported extension %q — use .gif, .webm, or .mp4", ext)
-	}
-
-	dir := filepath.Dir(cleaned)
-	dirInfo, err := os.Lstat(dir)
-	if err != nil {
-		return fmt.Errorf("output directory: %w", err)
-	}
-	if dirInfo.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("output directory %q is a symlink", dir)
-	}
-	if !dirInfo.IsDir() {
-		return fmt.Errorf("output directory %q is not a directory", dir)
-	}
-
-	if info, err := os.Lstat(cleaned); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("refusing to follow symlink at %q", cleaned)
-		}
-		return fmt.Errorf("file already exists at %q — remove it first or choose another path", cleaned)
-	}
-
-	tmpPath := cleaned + ".encoding.tmp"
-	if _, err := os.Lstat(tmpPath); err == nil {
-		return fmt.Errorf("temp file already exists at %q — a previous encoding may still be running", tmpPath)
-	}
-
-	return nil
+	format := h.recorder.activeFormat()
+	ext := "." + format
+	name := fmt.Sprintf("rec_%s%s", time.Now().Format("20060102_150405"), ext)
+	return filepath.Join(dir, name), nil
 }
 
 // HandleRecordStatus returns the current recording status.
