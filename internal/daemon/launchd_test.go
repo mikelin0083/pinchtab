@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -39,8 +40,27 @@ func TestLaunchdManagerInstallWritesPlistAndBootstrapsAgent(t *testing.T) {
 	if !strings.Contains(content, "<string>/Applications/Pinchtab.app/Contents/MacOS/pinchtab</string>") {
 		t.Fatalf("expected executable path in plist: %s", content)
 	}
+	if !strings.Contains(content, "<key>WorkingDirectory</key>") || !strings.Contains(content, "<string>"+root+"</string>") {
+		t.Fatalf("expected working directory in plist: %s", content)
+	}
+	if !strings.Contains(content, "<key>HOME</key>") || !strings.Contains(content, "<string>"+root+"</string>") {
+		t.Fatalf("expected HOME environment in plist: %s", content)
+	}
 	if !strings.Contains(content, "<string>/tmp/pinchtab/config.json</string>") {
 		t.Fatalf("expected config path in plist: %s", content)
+	}
+	stdoutLogPath := filepath.Join(root, ".pinchtab", "logs", "daemon.out.log")
+	stderrLogPath := filepath.Join(root, ".pinchtab", "logs", "daemon.err.log")
+	if !strings.Contains(content, "<string>"+stdoutLogPath+"</string>") {
+		t.Fatalf("expected stdout log path in plist: %s", content)
+	}
+	if !strings.Contains(content, "<string>"+stderrLogPath+"</string>") {
+		t.Fatalf("expected stderr log path in plist: %s", content)
+	}
+	if info, err := os.Stat(filepath.Join(root, ".pinchtab", "logs")); err != nil {
+		t.Fatalf("expected log directory to exist: %v", err)
+	} else if !info.IsDir() {
+		t.Fatalf("expected log directory, got file")
 	}
 
 	expectedCalls := []string{
@@ -70,5 +90,44 @@ func TestLaunchdManagerPreflightRequiresGUIDomain(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "active launchd GUI session") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLaunchdManagerLogsFallsBackToLegacyPath(t *testing.T) {
+	root := t.TempDir()
+	legacyLogPath := "/tmp/pinchtab.err.log"
+	legacyContent, legacyErr := os.ReadFile(legacyLogPath)
+	hadLegacy := legacyErr == nil
+	if err := os.WriteFile(legacyLogPath, []byte("legacy launchd log\n"), 0644); err != nil {
+		t.Fatalf("write legacy log: %v", err)
+	}
+	t.Cleanup(func() {
+		if hadLegacy {
+			_ = os.WriteFile(legacyLogPath, legacyContent, 0644)
+		} else {
+			_ = os.Remove(legacyLogPath)
+		}
+	})
+
+	runner := &fakeCommandRunner{
+		outputs: map[string]string{
+			"tail -n 20 /tmp/pinchtab.err.log": "tail output",
+		},
+	}
+	manager := &launchdManager{
+		env:    environment{homeDir: root, osName: "darwin"},
+		runner: runner,
+	}
+
+	output, err := manager.Logs(20)
+	if err != nil {
+		t.Fatalf("Logs returned error: %v", err)
+	}
+	if output != "tail output" {
+		t.Fatalf("unexpected logs output: %q", output)
+	}
+	expected := "tail -n 20 /tmp/pinchtab.err.log"
+	if len(runner.calls) != 1 || runner.calls[0] != expected {
+		t.Fatalf("tail call = %v, want %q", runner.calls, expected)
 	}
 }
