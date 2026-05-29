@@ -56,17 +56,26 @@ func TestBuildChromeArgsHeadlessUsesSoftwareRendering(t *testing.T) {
 }
 
 func TestBuildChromeArgsIncludesGlobalUserAgent(t *testing.T) {
+	// ChromeVersion only (no explicit custom UA): Chrome must run WITHOUT
+	// --user-agent so its native, complete high-entropy UA Client Hints are served.
 	args := buildChromeArgs(&config.RuntimeConfig{ChromeVersion: "144.0.7559.133"}, 9222)
-
-	found := false
 	for _, arg := range args {
+		if strings.HasPrefix(arg, "--user-agent=") {
+			t.Fatalf("did not expect a pinned user-agent without a custom UA, got %v", args)
+		}
+	}
+
+	// Explicit custom UA: it must be pinned.
+	custom := buildChromeArgs(&config.RuntimeConfig{ChromeVersion: "144.0.7559.133", UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"}, 9222)
+	found := false
+	for _, arg := range custom {
 		if strings.HasPrefix(arg, "--user-agent=Mozilla/5.0") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("expected global user-agent arg in %v", args)
+		t.Fatalf("expected an explicit custom UA to be pinned in %v", custom)
 	}
 }
 

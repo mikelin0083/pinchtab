@@ -50,7 +50,19 @@ func ResolveUserAgent(userAgent, chromeVersion string) string {
 }
 
 func BuildPersona(userAgent, chromeVersion string) BrowserPersona {
-	ua := ResolveUserAgent(userAgent, chromeVersion)
+	major := chromeVersion
+	if i := strings.Index(chromeVersion, "."); i > 0 {
+		major = chromeVersion[:i]
+	}
+	if major == "" {
+		major = "144"
+	}
+	// Freeze the UA build to <major>.0.0.0. Real Chrome (UA reduction, v100+) never
+	// exposes the full build in navigator.userAgent — a UA like "Chrome/146.0.7680.80"
+	// is a fingerprint tell. The full build still lives in the high-entropy UA-CH
+	// (uaFullVersion / fullVersionList). An explicit custom userAgent is respected
+	// verbatim by ResolveUserAgent.
+	ua := ResolveUserAgent(userAgent, major+".0.0.0")
 	language := "en-US"
 	languages := []string{"en-US", "en"}
 	acceptLanguage := "en-US,en"
@@ -60,14 +72,6 @@ func BuildPersona(userAgent, chromeVersion string) BrowserPersona {
 			Languages:      languages,
 			AcceptLanguage: acceptLanguage,
 		}
-	}
-
-	major := chromeVersion
-	if i := strings.Index(chromeVersion, "."); i > 0 {
-		major = chromeVersion[:i]
-	}
-	if major == "" {
-		major = "144"
 	}
 
 	navigatorPlatform := "Linux x86_64"
