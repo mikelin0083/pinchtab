@@ -91,15 +91,40 @@ func (h *Handlers) HandleUpload(w http.ResponseWriter, r *http.Request) {
 		req.Paths[i] = safe
 	}
 
-	// Decode base64 files to temp dir.
+	// Decode base64 files into a staged dir that OUTLIVES this request. CDP
+	// SetFileInputFiles only records the path on the <input>; the browser reads the
+	// bytes LAZILY at form-submit time, which is typically a separate, later
+	// request. Deleting the decoded file when this handler returns (the previous
+	// `defer os.RemoveAll`) left the file gone by submit time, so multipart
+	// submissions failed with ERR_FILE_NOT_FOUND ("Your file couldn't be accessed.
+	// It may have been moved, edited, or deleted."). Keep the staged files on the
+	// success path (reclaimed with the session StateDir) and only remove them if
+	// the upload fails before attaching to a tab.
 	var tempFiles []string
+	var stagedDir string
+	uploadSucceeded := false
+	defer func() {
+		if !uploadSucceeded && stagedDir != "" {
+			_ = os.RemoveAll(stagedDir)
+		}
+	}()
 	if len(req.Files) > 0 {
-		tmpDir, err := os.MkdirTemp("", "pinchtab-upload-*")
+		// Stage under StateDir/uploads when configured (persists for the session),
+		// else the OS temp dir — never the process working directory.
+		stageBase := os.TempDir()
+		if strings.TrimSpace(h.Config.StateDir) != "" {
+			if err := os.MkdirAll(uploadBase, 0o755); err != nil {
+				httpx.Error(w, 500, fmt.Errorf("create upload dir: %w", err))
+				return
+			}
+			stageBase = uploadBase
+		}
+		dir, err := os.MkdirTemp(stageBase, "pinchtab-upload-*")
 		if err != nil {
-			httpx.Error(w, 500, fmt.Errorf("create temp dir: %w", err))
+			httpx.Error(w, 500, fmt.Errorf("create staged dir: %w", err))
 			return
 		}
-		defer func() { _ = os.RemoveAll(tmpDir) }()
+		stagedDir = dir
 
 		for i, f := range req.Files {
 			data, ext, err := decodeFileData(f)
@@ -116,9 +141,9 @@ func (h *Handlers) HandleUpload(w http.ResponseWriter, r *http.Request) {
 				httpx.Error(w, 400, fmt.Errorf("upload payload too large: max %d bytes total", maxTotalBytes))
 				return
 			}
-			path := fmt.Sprintf("%s/upload-%d%s", tmpDir, i, ext)
+			path := fmt.Sprintf("%s/upload-%d%s", stagedDir, i, ext)
 			if err := os.WriteFile(path, data, 0600); err != nil {
-				httpx.Error(w, 500, fmt.Errorf("write temp file: %w", err))
+				httpx.Error(w, 500, fmt.Errorf("write staged file: %w", err))
 				return
 			}
 			tempFiles = append(tempFiles, path)
@@ -161,6 +186,10 @@ func (h *Handlers) HandleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.recordActivity(r, activity.Update{Action: "upload", TabID: resolvedTabID})
+
+	// Files attached successfully — keep the staged copies so the browser can read
+	// them at form-submit time (the deferred cleanup becomes a no-op).
+	uploadSucceeded = true
 
 	httpx.JSON(w, 200, map[string]any{
 		"status": "ok",

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -329,5 +330,36 @@ func TestHandleUpload_Disabled(t *testing.T) {
 	h.HandleUpload(w, req)
 	if w.Code != 403 {
 		t.Errorf("expected 403 when upload disabled, got %d", w.Code)
+	}
+}
+
+// Regression: decoded base64 uploads must persist past the handler so the browser
+// can read them LAZILY at form-submit time (a separate later request). They are
+// kept on success and removed only on a pre-attach failure — never written into
+// the process working directory.
+func TestHandleUpload_StagedFilesCleanedOnFailureNotCWD(t *testing.T) {
+	tmpDir := t.TempDir()
+	h := New(&mockBridge{failTab: true}, &config.RuntimeConfig{AllowUpload: true, StateDir: tmpDir}, nil, nil, nil)
+	png := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+	body := fmt.Sprintf(`{"selector":"input[type=file]","files":[%q]}`, png)
+	req := httptest.NewRequest("POST", "/upload?tabId=t1", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.HandleUpload(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 (failTab) after decode, got %d", w.Code)
+	}
+	// The decode succeeded but the upload never attached to a tab → staged dir
+	// must be cleaned up.
+	entries, _ := os.ReadDir(filepath.Join(tmpDir, "uploads"))
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "pinchtab-upload-") {
+			t.Fatalf("staged upload dir leaked on failure: %s", e.Name())
+		}
+	}
+	// Must never create an "uploads" dir in the process working directory.
+	if _, err := os.Stat("uploads"); err == nil {
+		_ = os.RemoveAll("uploads")
+		t.Fatalf("upload handler created ./uploads in the working directory")
 	}
 }
